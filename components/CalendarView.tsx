@@ -1,3 +1,5 @@
+import { db } from '@/db/client';
+import { sessions } from '@/db/schema';
 import i18n from '@/i18n';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { eq } from 'drizzle-orm';

@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs } from 'expo-router';
 import React from 'react';
@@ -28,7 +29,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Takvim',
+          title: i18n.t('calendar'),
           tabBarIcon: ({ color }) => <TabBarIcon name="calendar" color={color} />,
           headerShown: false,
 
@@ -37,7 +38,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="stats"
         options={{
-          title: 'İstatistikler',
+          title: i18n.t('stats'),
           tabBarIcon: ({ color }) => <TabBarIcon name="bar-chart" color={color} />,
           headerShown: false,
         }}
