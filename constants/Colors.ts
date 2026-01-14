@@ -1,19 +1,27 @@
-const tintColorLight = '#2f95dc';
-const tintColorDark = '#fff';
+const neonPink = '#FF007F';
+const neonCyan = '#00FFFF';
+const deepBlack = '#000000';
+const darkGray = '#1A1A1A';
 
 export default {
   light: {
-    text: '#000',
-    background: '#fff',
-    tint: tintColorLight,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorLight,
+    text: '#fff', // Force dark mode look even in light
+    background: deepBlack,
+    tint: neonCyan,
+    tabIconDefault: '#666',
+    tabIconSelected: neonCyan,
   },
   dark: {
     text: '#fff',
-    background: '#000',
-    tint: tintColorDark,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorDark,
+    background: deepBlack,
+    tint: neonCyan,
+    tabIconDefault: '#666',
+    tabIconSelected: neonCyan,
   },
+  common: {
+    neonPink,
+    neonCyan,
+    deepBlack,
+    darkGray
+  }
 };
