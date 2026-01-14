@@ -194,19 +194,17 @@ export default function CalendarView() {
                 </View>
 
                 {/* Monthly Summary */}
-                <View className="mt-8 bg-gray-900 rounded-xl p-4 border border-gray-800">
-                    <Text className="text-white font-bold mb-2 text-center text-lg">
-                        {currentDate.toLocaleString('tr-TR', { month: 'long' })} Özeti
-                    </Text>
-                    <View className="flex-row justify-around">
-                        <View className="items-center">
-                            <Text className="text-gray-400 text-xs">Gidilen Gün</Text>
-                            <Text className="text-neonPink text-2xl font-bold">{monthStats.days}</Text>
-                        </View>
-                        <View className="items-center">
-                            <Text className="text-gray-400 text-xs">Toplam Kere</Text>
-                            <Text className="text-neonCyan text-2xl font-bold">{monthStats.count}</Text>
-                        </View>
+                <Text className="text-white font-bold mb-4 mt-8 text-xl">
+                    {currentDate.toLocaleString('tr-TR', { month: 'long' })} Özeti
+                </Text>
+                <View className="flex-row justify-between mb-8">
+                    <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonPink">
+                        <Text className="text-gray-400 text-sm">Gidilen Gün</Text>
+                        <Text className="text-3xl text-neonPink font-bold">{monthStats.days}</Text>
+                    </View>
+                    <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonCyan">
+                        <Text className="text-gray-400 text-sm">Toplam Kere</Text>
+                        <Text className="text-3xl text-neonCyan font-bold">{monthStats.count}</Text>
                     </View>
                 </View>
             </View>
