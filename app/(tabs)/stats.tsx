@@ -1,5 +1,6 @@
 import { db } from '@/db/client';
 import { sessions } from '@/db/schema';
+import i18n from '@/i18n';
 import { desc } from 'drizzle-orm';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -53,11 +54,12 @@ export default function StatsScreen() {
         }
       }
 
-      // Format best month (YYYY-MM -> MonthName Year)
+      // Format best month 
       if (bestMonth) {
         const [y, m] = bestMonth.split('-');
-        const date = new Date(parseInt(y), parseInt(m) - 1);
-        setTopMonth(date.toLocaleString('tr-TR', { month: 'long', year: 'numeric' }));
+        const monthIdx = parseInt(m) - 1;
+        const translatedMonth = i18n.t(`months.${monthIdx}`);
+        setTopMonth(`${translatedMonth} ${y}`);
       } else {
         setTopMonth("-");
       }
@@ -79,47 +81,50 @@ export default function StatsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
       <ScrollView className="p-4">
-        <Text className="text-3xl text-white font-bold mb-6 mt-4">İstatistikler</Text>
+        <Text className="text-3xl text-white font-bold mb-6 mt-4">{i18n.t('stats')}</Text>
 
         {/* Summary Cards */}
         <View className="flex-row flex-wrap justify-between mb-6">
           <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonPink mb-4">
-            <Text className="text-gray-400 text-sm">Toplam Gün Sayısı</Text>
+            <Text className="text-gray-400 text-sm">{i18n.t('totalDays')}</Text>
             <Text className="text-3xl text-neonPink font-bold">{totalSessions}</Text>
           </View>
           <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonCyan mb-4">
-            <Text className="text-gray-400 text-sm">Toplam Kere</Text>
+            <Text className="text-gray-400 text-sm">{i18n.t('totalVisits')}</Text>
             <Text className="text-3xl text-neonCyan font-bold">{totalVisits}</Text>
           </View>
           <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-purple-500 mb-4">
-            <Text className="text-gray-400 text-sm">Günlük Rekor</Text>
+            <Text className="text-gray-400 text-sm">{i18n.t('maxDaily')}</Text>
             <Text className="text-3xl text-purple-400 font-bold">{maxDaily}</Text>
           </View>
           <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-yellow-500 mb-4">
-            <Text className="text-gray-400 text-sm">En Yoğun Ay</Text>
+            <Text className="text-gray-400 text-sm">{i18n.t('topMonth')}</Text>
             <Text className="text-xl text-yellow-400 font-bold" numberOfLines={1} adjustsFontSizeToFit>{topMonth}</Text>
           </View>
         </View>
 
         {/* Recent List */}
-        <Text className="text-xl text-white font-bold mb-4">Son Kayıtlar</Text>
+        <Text className="text-xl text-white font-bold mb-4">{i18n.t('recentRecords')}</Text>
         {recentSessions.map((s) => {
           const d = new Date(s.date);
-          const formattedDate = d.toLocaleString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+          const day = d.getDate();
+          const year = d.getFullYear();
+          const monthName = i18n.t(`months.${d.getMonth()}`);
+          const formattedDate = `${day} ${monthName} ${year}`;
 
           return (
             <View key={s.id} className="bg-gray-900 p-4 rounded-lg mb-2 flex-row justify-between items-center bg-opacity-50">
               <Text className="text-white text-lg">{formattedDate}</Text>
               <View className="flex-row items-center">
                 <Text className="text-neonCyan font-bold text-xl mr-2">{s.count}</Text>
-                <Text className="text-gray-500 text-xs">kere</Text>
+                <Text className="text-gray-500 text-xs">{i18n.t('times')}</Text>
               </View>
             </View>
           );
         })}
 
         {recentSessions.length === 0 && (
-          <Text className="text-gray-500 italic">Henüz kayıt yok.</Text>
+          <Text className="text-gray-500 italic">{i18n.t('noRecords')}</Text>
         )}
       </ScrollView>
     </SafeAreaView>
