@@ -1,5 +1,4 @@
-import { db } from '@/db/client';
-import { sessions } from '@/db/schema';
+import i18n from '@/i18n';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { eq } from 'drizzle-orm';
 import { useFocusEffect } from 'expo-router';
@@ -7,10 +6,8 @@ import React, { useCallback, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const DAYS = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt']; // Sunday first ? usually Mon first in TR? 
-// TR: Pzt(Mon), Sal(Tue), Car(Wed), Per(Thu), Cum(Fri), Cmt(Sat), Paz(Sun).
-// Date.getDay(): 0=Sun. 
-// Let's stick to standard 0=Sun for logic, but display mapped.
+// Use i18n for days
+const getDaysShort = () => i18n.t('daysShort') as unknown as string[];
 
 export default function CalendarView() {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -172,7 +169,8 @@ export default function CalendarView() {
                         <FontAwesome name="chevron-left" size={24} color="#00FFFF" />
                     </TouchableOpacity>
                     <Text className="text-2xl text-white font-bold">
-                        {currentDate.toLocaleString('tr-TR', { month: 'long', year: 'numeric' })}
+                        {/* Manual month lookup from i18n since toLocaleString is tricky with custom langs */}
+                        {i18n.t(`months.${currentDate.getMonth()}`)} {currentDate.getFullYear()}
                     </Text>
                     <TouchableOpacity onPress={handleNextMonth} className="p-2">
                         <FontAwesome name="chevron-right" size={24} color="#00FFFF" />
@@ -181,8 +179,8 @@ export default function CalendarView() {
 
                 {/* Week Days */}
                 <View className="flex-row mb-2 border-b border-gray-800 pb-2">
-                    {['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'].map(day => (
-                        <View key={day} className="w-[14.2%] items-center">
+                    {getDaysShort().map((day: string, index: number) => (
+                        <View key={index} className="w-[14.2%] items-center">
                             <Text className="text-gray-500 font-bold uppercase text-xs">{day}</Text>
                         </View>
                     ))}
@@ -195,15 +193,15 @@ export default function CalendarView() {
 
                 {/* Monthly Summary */}
                 <Text className="text-white font-bold mb-4 mt-8 text-xl">
-                    {currentDate.toLocaleString('tr-TR', { month: 'long' })} Özeti
+                    {i18n.t(`months.${currentDate.getMonth()}`)} {i18n.t('summary')}
                 </Text>
                 <View className="flex-row justify-between mb-8">
                     <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonPink">
-                        <Text className="text-gray-400 text-sm">Gidilen Gün</Text>
+                        <Text className="text-gray-400 text-sm">{i18n.t('visitedDays')}</Text>
                         <Text className="text-3xl text-neonPink font-bold">{monthStats.days}</Text>
                     </View>
                     <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonCyan">
-                        <Text className="text-gray-400 text-sm">Toplam Kere</Text>
+                        <Text className="text-gray-400 text-sm">{i18n.t('totalVisits')}</Text>
                         <Text className="text-3xl text-neonCyan font-bold">{monthStats.count}</Text>
                     </View>
                 </View>
