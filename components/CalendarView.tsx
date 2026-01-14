@@ -203,7 +203,7 @@ export default function CalendarView() {
                         <Text className="text-3xl text-neonPink font-bold">{monthStats.days}</Text>
                     </View>
                     <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonCyan">
-                        <Text className="text-gray-400 text-sm">{i18n.t('totalVisits')}</Text>
+                        <Text className="text-gray-400 text-sm">{i18n.t('totalMicrophones')}</Text>
                         <Text className="text-3xl text-neonCyan font-bold">{monthStats.count}</Text>
                     </View>
                 </View>

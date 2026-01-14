@@ -90,7 +90,7 @@ export default function StatsScreen() {
             <Text className="text-3xl text-neonPink font-bold">{totalSessions}</Text>
           </View>
           <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonCyan mb-4">
-            <Text className="text-gray-400 text-sm">{i18n.t('totalVisits')}</Text>
+            <Text className="text-gray-400 text-sm">{i18n.t('totalMicrophones')}</Text>
             <Text className="text-3xl text-neonCyan font-bold">{totalVisits}</Text>
           </View>
           <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-purple-500 mb-4">
