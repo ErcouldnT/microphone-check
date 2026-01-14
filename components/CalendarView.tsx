@@ -19,6 +19,8 @@ export default function CalendarView() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
+    const [monthStats, setMonthStats] = useState({ days: 0, count: 0 });
+
     const loadData = async () => {
         try {
             const allSessions = await db.select().from(sessions);
@@ -27,9 +29,26 @@ export default function CalendarView() {
                 map[s.date] = (map[s.date] || 0) + s.count;
             });
             setSessionMap(map);
+            calculateMonthStats(map, year, month);
         } catch (e) {
             console.error(e);
         }
+    };
+
+    const calculateMonthStats = (map: Record<string, number>, y: number, m: number) => {
+        let days = 0;
+        let count = 0;
+        const prefix = `${y}-${String(m + 1).padStart(2, '0')}`;
+
+        Object.keys(map).forEach(date => {
+            if (date.startsWith(prefix)) {
+                if (map[date] > 0) {
+                    days++;
+                    count += map[date];
+                }
+            }
+        });
+        setMonthStats({ days, count });
     };
 
     useFocusEffect(
@@ -49,8 +68,16 @@ export default function CalendarView() {
     // let startOffset = firstDay === 0 ? 6 : firstDay - 1;
     // keeping it simple (Sun start) for now or match headers.
 
-    const handlePrevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-    const handleNextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+    const handlePrevMonth = () => {
+        const newDate = new Date(year, month - 1, 1);
+        setCurrentDate(newDate);
+        calculateMonthStats(sessionMap, newDate.getFullYear(), newDate.getMonth());
+    };
+    const handleNextMonth = () => {
+        const newDate = new Date(year, month + 1, 1);
+        setCurrentDate(newDate);
+        calculateMonthStats(sessionMap, newDate.getFullYear(), newDate.getMonth());
+    };
 
     // Helper to handle updates
     const updateSession = async (dayString: string, change: number) => {
@@ -164,6 +191,23 @@ export default function CalendarView() {
                 {/* Grid */}
                 <View className="flex-row flex-wrap">
                     {renderDays()}
+                </View>
+
+                {/* Monthly Summary */}
+                <View className="mt-8 bg-gray-900 rounded-xl p-4 border border-gray-800">
+                    <Text className="text-white font-bold mb-2 text-center text-lg">
+                        {currentDate.toLocaleString('tr-TR', { month: 'long' })} Özeti
+                    </Text>
+                    <View className="flex-row justify-around">
+                        <View className="items-center">
+                            <Text className="text-gray-400 text-xs">Gidilen Gün</Text>
+                            <Text className="text-neonPink text-2xl font-bold">{monthStats.days}</Text>
+                        </View>
+                        <View className="items-center">
+                            <Text className="text-gray-400 text-xs">Toplam Kere</Text>
+                            <Text className="text-neonCyan text-2xl font-bold">{monthStats.count}</Text>
+                        </View>
+                    </View>
                 </View>
             </View>
         </SafeAreaView>
