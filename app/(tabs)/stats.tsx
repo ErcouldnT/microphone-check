@@ -192,21 +192,21 @@ export default function StatsScreen() {
         {/* Data Management Section */}
         <View className="mt-8 mb-8">
           <Text className="text-xl text-white font-bold mb-4">{i18n.t('dataManagement')}</Text>
-          <View>
+          <View className="flex-row justify-between">
             <TouchableOpacity
               onPress={handleExport}
-              className="bg-gray-900 p-4 rounded-lg mb-3 flex-row items-center justify-center border border-green-500/50"
+              className="bg-gray-900 border border-green-500 p-4 rounded-xl w-[48%] items-center flex-row justify-center"
             >
               <FontAwesome name="upload" size={16} color="#00ff00" style={{ marginRight: 8 }} />
-              <Text className="text-green-500 font-bold ml-2 text-lg">{i18n.t('shareData')}</Text>
+              <Text className="text-green-500 font-bold ml-2">{i18n.t('shareData')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={handleImport}
-              className="bg-gray-900 p-4 rounded-lg mb-3 flex-row items-center justify-center border border-blue-500/50"
+              className="bg-gray-900 border border-blue-500 p-4 rounded-xl w-[48%] items-center flex-row justify-center"
             >
               <FontAwesome name="download" size={16} color="#3b82f6" style={{ marginRight: 8 }} />
-              <Text className="text-blue-500 font-bold ml-2 text-lg">{i18n.t('importData')}</Text>
+              <Text className="text-blue-500 font-bold ml-2">{i18n.t('importData')}</Text>
             </TouchableOpacity>
           </View>
         </View>
