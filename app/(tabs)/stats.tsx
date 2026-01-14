@@ -1,10 +1,14 @@
 import { db } from '@/db/client';
 import { sessions } from '@/db/schema';
 import i18n from '@/i18n';
-import { desc } from 'drizzle-orm';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { desc, eq } from 'drizzle-orm';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import React, { useCallback, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function StatsScreen() {
@@ -76,7 +80,65 @@ export default function StatsScreen() {
     }, [])
   );
 
+  const handleExport = async () => {
+    try {
+      const allData = await db.select().from(sessions);
+      const json = JSON.stringify(allData, null, 2);
+      const fileUri = FileSystem.documentDirectory + 'microphone-check-backup.json';
 
+      await FileSystem.writeAsStringAsync(fileUri, json);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri);
+      } else {
+        Alert.alert(i18n.t('error'), "Sharing is not available on this device");
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert(i18n.t('error'), "Export failed");
+    }
+  };
+
+  const handleImport = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const fileUri = result.assets[0].uri;
+      const jsonString = await FileSystem.readAsStringAsync(fileUri);
+      const data = JSON.parse(jsonString);
+
+      if (Array.isArray(data)) {
+        let importedCount = 0;
+        for (const item of data) {
+          if (item.date && typeof item.count === 'number') {
+            // Check if exists
+            const existing = await db.select().from(sessions).where(eq(sessions.date, item.date));
+            if (existing.length > 0) {
+              // Merge/Add to existing (Additive logic)
+              const existingId = existing[0].id;
+              await db.update(sessions).set({ count: existing[0].count + item.count }).where(eq(sessions.id, existingId));
+            } else {
+              await db.insert(sessions).values({
+                date: item.date,
+                count: item.count
+              });
+            }
+            importedCount++;
+          }
+        }
+        Alert.alert(i18n.t('importSuccess'), `${importedCount} records processed.`);
+        loadStats();
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert(i18n.t('error'), "Import failed");
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
@@ -126,6 +188,28 @@ export default function StatsScreen() {
         {recentSessions.length === 0 && (
           <Text className="text-gray-500 italic">{i18n.t('noRecords')}</Text>
         )}
+
+        {/* Data Management Section */}
+        <View className="mt-8 mb-8">
+          <Text className="text-xl text-white font-bold mb-4">{i18n.t('dataManagement')}</Text>
+          <View>
+            <TouchableOpacity
+              onPress={handleExport}
+              className="bg-gray-900 p-4 rounded-lg mb-3 flex-row items-center justify-center border border-green-500/50"
+            >
+              <FontAwesome name="upload" size={16} color="#00ff00" style={{ marginRight: 8 }} />
+              <Text className="text-green-500 font-bold ml-2 text-lg">{i18n.t('shareData')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleImport}
+              className="bg-gray-900 p-4 rounded-lg mb-3 flex-row items-center justify-center border border-blue-500/50"
+            >
+              <FontAwesome name="download" size={16} color="#3b82f6" style={{ marginRight: 8 }} />
+              <Text className="text-blue-500 font-bold ml-2 text-lg">{i18n.t('importData')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
