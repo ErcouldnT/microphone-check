@@ -1,66 +1,90 @@
-# 🎤 Microphone Check
+# 🎤 Microphone Check (v3.0.0)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Expo](https://img.shields.io/badge/Expo-SDK%2054-000020.svg?logo=expo)](https://expo.dev)
-[![React Native](https://img.shields.io/badge/React%20Native-0.81-61DAFB.svg?logo=react)](https://reactnative.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org)
-[![WebSocket](https://img.shields.io/badge/Real--Time-WebSocket-00FFFF.svg)](https://cal.erkut.dev)
+<div align="center">
+  <img src="./assets/images/logo.png" width="140" height="140" alt="Microphone Check Logo" style="border-radius: 28px; box-shadow: 0 0 20px #00FFFF;" />
+  <br/><br/>
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![Expo](https://img.shields.io/badge/Expo-SDK%2054-000020.svg?logo=expo)](https://expo.dev)
+  [![React Native](https://img.shields.io/badge/React%20Native-0.81-61DAFB.svg?logo=react)](https://reactnative.dev)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org)
+  [![WebSocket](https://img.shields.io/badge/Real--Time-WebSocket-00FFFF.svg)](https://cal.erkut.dev)
+  [![Push Notifications](https://img.shields.io/badge/Push-APNs%20%7C%20FCM%20v1-FF007F.svg)](https://expo.dev)
+</div>
 
-**Microphone Check** is a modern, cyberpunk/neon-styled mobile application built with React Native (Expo) to track daily visits, sessions, or microphone checks. It features **real-time shared calendar synchronization**, allowing friends or partners to pair and update a joint calendar simultaneously over WebSockets.
+<br/>
+
+**Microphone Check** is an ultra-modern, cyberpunk-styled shared couple calendar and tracker built with React Native (Expo). It connects partners through seamless real-time WebSocket synchronization, cross-platform push notifications (Apple APNs & Google FCM v1), interactive multi-view calendar scheduling, milestone relationship counters, and synchronized daily notes.
 
 ---
 
-## ✨ Features
+## ⚡ What's New in v3.0.0
 
-- 📅 **Interactive Calendar:**
-  - Tap any day to increment the count (+1) or long-press to decrement (-1).
-  - Visual badge counters with glowing neon accents.
-- ⚡ **Real-Time Shared Calendar (Ortak Takvim):**
-  - **Pair with a Friend:** Generate a 6-character room code (e.g. `MIC-7492`) or join an existing room.
-  - **Live WebSocket Sync:** Instant screen updates across both devices as soon as either person taps a date.
-  - **Local-First & Offline Resilience:** Optimistic UI with Expo SQLite local storage — works seamlessly offline and automatically reconciles when reconnected.
-  - **Status Indicator:** Real-time visual connection pill (🟢 Live / 🟡 Connecting / 🔴 Offline / ⚪ Local Mode).
-- 📈 **Comprehensive Statistics:**
-  - Total days visited & total microphone checks.
-  - Daily records and most active month analysis.
-  - Recent activity log with localized timestamps.
-- 💾 **Data Management:**
-  - **Export:** Backup your entire calendar data as formatted JSON.
-  - **Import:** Restore or merge backed-up JSON data.
+- 🥷 **Cyber Ninja Couple Logo & Animated Splash Screen:**
+  - Modern geometric vector iconography featuring Neon Cyan (male silhouette) and Neon Pink (female silhouette) cyber ninjas with glowing visors.
+  - Fluid animated splash screen powered by `react-native-reanimated` with glow pulsing, zoom-in, and graceful fade-out transitions.
+- 🛡️ **API Key Security Architecture:**
+  - Protected backend REST endpoints (`/api/*`) and WebSocket handshake authentication with `X-API-Key`.
+  - Configurable server settings and custom API key support directly in the mobile UI.
+- 📱 **Unified Day Action Dialog (Native Multi-Tab Popup):**
+  - Replaces fragmented bottom sheets with a centered, keyboard-friendly dialog.
+  - **Tabs:**
+    1. 📅 **Plan / Event:** Multi-day date ranges, time pickers, personalized assignees (`Sen 👨 / Partnerin 👩 / İkimiz ✨`), and color tags.
+    2. 📝 **Daily Note:** Formatted multi-line daily notes shared instantly with your partner.
+    3. 🔢 **Day Session Counter:** Neon counter with rapid increment/decrement.
+    4. ⭐ **Relationship Counter:** Count days since anniversary or countdown to upcoming trips.
+- 🔔 **Intelligent Self-Exclusion Push Notifications:**
+  - When you add or edit a plan, note, or counter, push notifications are dispatched **only to your partner's devices**, never echoing back to yourself.
+  - Push deduplication engine ensures zero duplicate notifications on iOS lock screens.
+
+---
+
+## ✨ Core Features
+
+- 📅 **Triple-Mode Calendar Views:**
+  - **Month View:** Monthly overview with day badges, counters, and event indicators.
+  - **Week View:** Horizontal day strip with event timeline and active day statistics.
+  - **Day View:** Hourly timetable with quick schedule overview.
+- 👥 **Role & Member Filtering:**
+  - Filter calendar events by **All**, **You (Sen)**, **Partner (Partnerin)**, or **Both (İkimiz)**.
+- 💖 **Milestone Relationship Counters:**
+  - Track anniversaries (*Days Together*), countdowns (*Days Left until Flight*), and special milestones with custom emojis.
+- 🔔 **Lock Screen Push Notifications (Even When Closed):**
+  - Native **Apple APNs** for iOS and **Google Firebase Cloud Messaging (FCM v1)** for Android.
 - 🌐 **Multi-Language Support (i18n):**
   - 🇹🇷 Turkish (Türkçe)
   - 🇬🇧 English
   - 🇷🇺 Russian (Русский)
-  - Auto-detects device language with fallback.
-- 🎨 **Neon Cyberpunk Aesthetic:**
-  - Dark-mode first design with `#00FFFF` (Neon Cyan) and `#FF007F` (Neon Pink) accents powered by NativeWind v4 (Tailwind CSS).
+- 💾 **Local-First & Offline Sync:**
+  - Powered by Expo SQLite and Drizzle ORM. Works completely offline and reconciles with the server when connected.
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Architecture & Tech Stack
 
 ### Mobile Client
-- **Framework:** [Expo](https://expo.dev/) (SDK 54) & [React Native 0.81](https://reactnative.dev/)
-- **Routing:** [Expo Router](https://docs.expo.dev/router/introduction/) (Typed file-based routing)
-- **Local Storage:** [Expo SQLite](https://docs.expo.dev/versions/latest/sdk/sqlite/) & [Drizzle ORM](https://orm.drizzle.team/)
+- **Framework:** [Expo SDK 54](https://expo.dev/) & [React Native 0.81](https://reactnative.dev/)
+- **Navigation:** [Expo Router v6](https://docs.expo.dev/router/introduction/)
+- **Database:** [Expo SQLite](https://docs.expo.dev/versions/latest/sdk/sqlite/) & [Drizzle ORM](https://orm.drizzle.team/)
 - **Styling:** [NativeWind v4](https://www.nativewind.dev/) (Tailwind CSS)
-- **Real-Time Client:** WebSocket client with auto-reconnection and heartbeat
-- **Localization:** [i18n-js](https://github.com/fnando/i18n-js) & [expo-localization](https://docs.expo.dev/versions/latest/sdk/localization/)
+- **Animations:** [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/)
+- **Push:** [Expo Notifications](https://docs.expo.dev/versions/latest/sdk/notifications/) (APNs + FCM v1)
 
 ### Backend Sync Server (`server/`)
 - **Runtime:** Node.js & TypeScript
-- **Networking:** Express REST API & [ws](https://github.com/websockets/ws) WebSocket Server
-- **Database:** SQLite via [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) with WAL mode and persistent volume
-- **Deployment:** Docker & Docker Compose (Optimized for Coolify / VPS)
+- **Server:** Express & [ws](https://github.com/websockets/ws)
+- **Database:** SQLite via [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) with WAL mode
+- **Push Dispatcher:** Expo HTTP/2 Push API with ticket & receipt tracking
+- **Security:** API Key middleware & WebSocket auth verification
 
 ---
 
-## 🚀 Getting Started (Mobile App)
+## 🚀 Getting Started
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v20+ recommended)
 - [npm](https://www.npmjs.com/)
-- [Expo Go](https://expo.dev/client) app on your mobile device or an Android/iOS emulator
+- [Xcode](https://developer.apple.com/xcode/) (for iOS builds) or [Android Studio](https://developer.android.com/studio) (for Android builds)
 
 ### Installation
 
@@ -75,28 +99,10 @@
    npm install
    ```
 
-3. Start the Expo development server:
+3. Start development server:
    ```bash
    npx expo start
    ```
-
-4. Scan the QR code using Expo Go (Android) or the Camera app (iOS).
-
----
-
-## 🐳 Self-Hosting the Sync Backend (Docker / Coolify)
-
-You can host your own real-time sync server using the included `docker-compose.yml`:
-
-```bash
-cd microphone-check
-docker compose up -d
-```
-
-### Deploying to Coolify
-1. In your Coolify dashboard, create a new resource using your Git repository or Docker Compose.
-2. Set your custom domain (e.g. `cal.erkut.dev`) mapped to port `3000`.
-3. Coolify automatically manages Let's Encrypt SSL certificates and WebSocket reverse proxying.
 
 ---
 
