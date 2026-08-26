@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-const DEFAULT_PROJECT_ID = '8b941571-081e-450a-8bf7-4001a1cfa69b';
+const DEFAULT_PROJECT_ID = 'f377d6e6-6992-46e0-878c-d96688e136a8';
 
 // Configure how notifications appear when app is in foreground or background
 Notifications.setNotificationHandler({
