@@ -26,7 +26,13 @@ export const unstable_settings = {
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+import { useState } from 'react';
+import AnimatedSplashScreen from '@/components/AnimatedSplashScreen';
+
 export default function RootLayout() {
+  const [appReady, setAppReady] = useState(false);
+  const [splashFinished, setSplashFinished] = useState(false);
+
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
@@ -37,21 +43,35 @@ export default function RootLayout() {
     initDb()
       .then(() => syncService.init())
       .then(() => notificationService.registerForPushNotificationsAsync())
-      .catch(e => console.error("Init Error:", e));
+      .then(() => setAppReady(true))
+      .catch(e => {
+        console.error("Init Error:", e);
+        setAppReady(true);
+      });
     if (error) throw error;
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
+    if (loaded && appReady) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [loaded, appReady]);
 
   if (!loaded) {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <>
+      <RootLayoutNav />
+      {!splashFinished && (
+        <AnimatedSplashScreen
+          isReady={appReady && loaded}
+          onAnimationComplete={() => setSplashFinished(true)}
+        />
+      )}
+    </>
+  );
 }
 
 function RootLayoutNav() {

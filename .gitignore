@@ -61,4 +61,6 @@ server/.env
 *.db
 *.db-journal
 *.db-wal
+.DS_Store
+*/.DS_Store
 

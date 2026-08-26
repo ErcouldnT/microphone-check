@@ -96,13 +96,25 @@ export default function DailyScheduleList({
           </Text>
         </View>
 
-        <TouchableOpacity
-          onPress={() => onAddEvent(selectedDate)}
-          className="bg-neonCyan/20 border border-neonCyan px-3 py-1.5 rounded-full flex-row items-center"
-        >
-          <FontAwesome name="plus" size={12} color="#00FFFF" style={{ marginRight: 6 }} />
-          <Text className="text-neonCyan text-xs font-bold">{i18n.t('addEvent')}</Text>
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-2">
+          {onEditNote && (
+            <TouchableOpacity
+              onPress={() => onEditNote(selectedDate)}
+              className="bg-neonPink/20 border border-neonPink px-2.5 py-1.5 rounded-full flex-row items-center"
+            >
+              <FontAwesome name="pencil" size={11} color="#FF007F" style={{ marginRight: 4 }} />
+              <Text className="text-neonPink text-xs font-bold">Not</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            onPress={() => onAddEvent(selectedDate)}
+            className="bg-neonCyan/20 border border-neonCyan px-3 py-1.5 rounded-full flex-row items-center"
+          >
+            <FontAwesome name="plus" size={11} color="#00FFFF" style={{ marginRight: 5 }} />
+            <Text className="text-neonCyan text-xs font-bold">{i18n.t('addEvent')}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Milestone Counters on this day (Automatic injection) */}

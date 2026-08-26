@@ -21,10 +21,20 @@ import {
 } from '@/db/counters';
 import { syncService } from '@/services/syncService';
 
-const EMOJI_OPTIONS = ['❤️', '💍', '✈️', '⭐', '🎉', '🥂', '🏠', '💌'];
+const EMOJI_OPTIONS = ['❤️', '💍', '✈️', '⭐', '🎉', '🥂', '🏠', '💌', '🏖️', '🎂'];
 
-export default function RelationshipCounterCard() {
-  const [countersList, setCountersList] = useState<RelationshipCounter[]>([]);
+interface RelationshipCounterCardProps {
+  counters?: RelationshipCounter[];
+  onAddCounter?: () => void;
+  onEditCounter?: (counter: RelationshipCounter) => void;
+}
+
+export default function RelationshipCounterCard({
+  counters,
+  onAddCounter,
+  onEditCounter,
+}: RelationshipCounterCardProps) {
+  const [internalList, setInternalList] = useState<RelationshipCounter[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCounter, setEditingCounter] = useState<RelationshipCounter | null>(null);
 
@@ -38,7 +48,6 @@ export default function RelationshipCounterCard() {
     try {
       const list = await getAllCounters();
       if (list.length === 0) {
-        // Seed default first meet counter if none exists
         const defaultCounter: RelationshipCounter = {
           id: 'default_anniversary',
           title: i18n.t('daysTogether'),
@@ -47,9 +56,9 @@ export default function RelationshipCounterCard() {
           icon: '❤️',
         };
         await saveCounter(defaultCounter);
-        setCountersList([defaultCounter]);
+        setInternalList([defaultCounter]);
       } else {
-        setCountersList(list);
+        setInternalList(list);
       }
     } catch (e) {
       console.error(e);
@@ -57,23 +66,24 @@ export default function RelationshipCounterCard() {
   };
 
   useEffect(() => {
-    loadCounters();
-
-    const unsubCounter = syncService.addCounterListener(() => {
+    if (!counters) {
       loadCounters();
-    });
+      const unsub = syncService.addCounterListener(() => {
+        loadCounters();
+      });
+      return () => {
+        unsub();
+      };
+    }
+  }, [counters]);
 
-    const unsubSync = syncService.addSyncListener(() => {
-      loadCounters();
-    });
-
-    return () => {
-      unsubCounter();
-      unsubSync();
-    };
-  }, []);
+  const displayList = counters || internalList;
 
   const handleOpenAdd = () => {
+    if (onAddCounter) {
+      onAddCounter();
+      return;
+    }
     setEditingCounter(null);
     setTitle('');
     setTargetDate(new Date().toISOString().split('T')[0]);
@@ -83,6 +93,10 @@ export default function RelationshipCounterCard() {
   };
 
   const handleOpenEdit = (counter: RelationshipCounter) => {
+    if (onEditCounter) {
+      onEditCounter(counter);
+      return;
+    }
     setEditingCounter(counter);
     setTitle(counter.title);
     setTargetDate(counter.targetDate);
@@ -92,53 +106,46 @@ export default function RelationshipCounterCard() {
   };
 
   const handleSave = async () => {
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle || !targetDate) {
-      Alert.alert(i18n.t('error'), 'Lütfen başlık ve tarih girin.');
+    if (!title.trim() || !targetDate.trim()) {
+      Alert.alert(i18n.t('error'), 'Lütfen başlık ve tarih alanlarını doldurun.');
       return;
     }
 
-    const counterObj: RelationshipCounter = {
-      id: editingCounter ? editingCounter.id : Math.random().toString(36).substring(2, 11),
-      title: trimmedTitle,
+    const payload: RelationshipCounter = {
+      id: editingCounter?.id || Math.random().toString(36).substring(2, 11),
+      title: title.trim(),
       targetDate: targetDate.trim(),
       type,
       icon,
     };
 
-    await saveCounter(counterObj);
-    syncService.sendCounterUpdate(counterObj);
+    await saveCounter(payload);
+    await syncService.sendCounterUpdate(payload);
     setModalVisible(false);
     loadCounters();
   };
 
   const handleDelete = async () => {
     if (!editingCounter) return;
-
-    Alert.alert(
-      i18n.t('deleteCounter'),
-      i18n.t('deleteEventConfirm'),
-      [
-        { text: i18n.t('cancel'), style: 'cancel' },
-        {
-          text: i18n.t('deleteCounter'),
-          style: 'destructive',
-          onPress: async () => {
-            await deleteCounter(editingCounter.id);
-            syncService.sendCounterDelete(editingCounter.id);
-            setModalVisible(false);
-            loadCounters();
-          },
+    Alert.alert(i18n.t('delete'), 'Bu sayacı silmek istediğinize emin misiniz?', [
+      { text: i18n.t('cancel'), style: 'cancel' },
+      {
+        text: i18n.t('delete'),
+        style: 'destructive',
+        onPress: async () => {
+          await deleteCounter(editingCounter.id);
+          await syncService.sendCounterDelete(editingCounter.id);
+          setModalVisible(false);
+          loadCounters();
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
     <View className="mb-4">
-      {/* Scrollable Milestone Cards */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-        {countersList.map((c) => {
+        {displayList.map((c) => {
           const diff = getDaysDifference(c.targetDate, c.type);
           const isUntil = c.type === 'until';
 
@@ -193,50 +200,50 @@ export default function RelationshipCounterCard() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Edit / Add Counter Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
+      {/* Centered Fallback Modal */}
+      <Modal visible={modalVisible} animationType="fade" transparent onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          className="flex-1 justify-end bg-black/85"
+          className="flex-1 justify-center items-center bg-black/80 p-4"
         >
-          <View className="bg-gray-950 rounded-t-3xl border-t border-gray-800 p-5 max-h-[85%]">
-            <View className="flex-row justify-between items-center mb-4">
+          <View className="w-full max-w-lg bg-gray-950 rounded-3xl border border-gray-800 p-5 max-h-[85%] shadow-2xl">
+            <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-900">
               <View className="flex-row items-center">
                 <Text className="text-2xl mr-2">{icon}</Text>
-                <Text className="text-xl font-extrabold text-white">
+                <Text className="text-lg font-extrabold text-white">
                   {editingCounter ? i18n.t('counters') : i18n.t('addCounter')}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setModalVisible(false)} className="p-2">
-                <FontAwesome name="times" size={20} color="#888" />
+              <TouchableOpacity onPress={() => setModalVisible(false)} className="p-1">
+                <FontAwesome name="times" size={18} color="#888" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* Title */}
-              <View className="mb-4">
-                <Text className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-1.5">
+              <View className="mb-3.5">
+                <Text className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-1">
                   {i18n.t('counterTitle')}
                 </Text>
                 <TextInput
                   value={title}
                   onChangeText={setTitle}
-                  placeholder="Örn: İlk Tanışma, Birlikte Geçen Gün, Buluşma..."
+                  placeholder="Örn: İlk Tanışma, Yıldönümü, Kavuşma..."
                   placeholderTextColor="#555"
-                  className="bg-gray-900 border border-gray-800 text-white p-3.5 rounded-xl text-base font-semibold"
+                  className="bg-black border border-gray-800 text-white px-3.5 py-2.5 rounded-xl text-sm font-semibold"
                 />
               </View>
 
-              {/* Type Switcher (Since vs Until) */}
-              <View className="mb-4">
-                <Text className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-2">
+              {/* Type Switcher */}
+              <View className="mb-3.5">
+                <Text className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-1.5">
                   {i18n.t('counterType')}
                 </Text>
-                <View className="flex-row bg-gray-900 border border-gray-800 p-1 rounded-xl">
+                <View className="flex-row gap-2">
                   <TouchableOpacity
                     onPress={() => setType('since')}
-                    className={`flex-1 py-2.5 rounded-lg items-center ${
-                      type === 'since' ? 'bg-pink-950 border border-neonPink' : ''
+                    className={`flex-1 py-2.5 rounded-xl border items-center ${
+                      type === 'since' ? 'bg-pink-950 border-neonPink' : 'bg-black border-gray-800'
                     }`}
                   >
                     <Text className={`font-bold text-xs ${type === 'since' ? 'text-neonPink' : 'text-gray-400'}`}>
@@ -246,8 +253,8 @@ export default function RelationshipCounterCard() {
 
                   <TouchableOpacity
                     onPress={() => setType('until')}
-                    className={`flex-1 py-2.5 rounded-lg items-center ${
-                      type === 'until' ? 'bg-purple-950 border border-purple-400' : ''
+                    className={`flex-1 py-2.5 rounded-xl border items-center ${
+                      type === 'until' ? 'bg-purple-950 border-purple-400' : 'bg-black border-gray-800'
                     }`}
                   >
                     <Text className={`font-bold text-xs ${type === 'until' ? 'text-purple-400' : 'text-gray-400'}`}>
@@ -258,8 +265,8 @@ export default function RelationshipCounterCard() {
               </View>
 
               {/* Target Date */}
-              <View className="mb-4">
-                <Text className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-1.5">
+              <View className="mb-3.5">
+                <Text className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-1">
                   {i18n.t('targetDate')} (YYYY-MM-DD)
                 </Text>
                 <TextInput
@@ -267,50 +274,47 @@ export default function RelationshipCounterCard() {
                   onChangeText={setTargetDate}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor="#555"
-                  className="bg-gray-900 border border-gray-800 text-white p-3.5 rounded-xl font-mono text-base"
+                  className="bg-black border border-gray-800 text-white px-3.5 py-2.5 rounded-xl font-mono text-sm text-center"
                 />
               </View>
 
               {/* Emoji Icons */}
-              <View className="mb-6">
-                <Text className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-2">
+              <View className="mb-5">
+                <Text className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-1.5">
                   Simge (Icon)
                 </Text>
-                <View className="flex-row justify-between bg-gray-900 border border-gray-800 p-3 rounded-2xl">
+                <View className="flex-row flex-wrap gap-2 justify-center py-1">
                   {EMOJI_OPTIONS.map((e) => (
                     <TouchableOpacity
                       key={e}
                       onPress={() => setIcon(e)}
-                      className={`w-9 h-9 rounded-full items-center justify-center ${
-                        icon === e ? 'bg-gray-800 border-2 border-neonPink scale-110' : ''
+                      className={`w-9 h-9 rounded-xl items-center justify-center border ${
+                        icon === e ? 'bg-gray-800 border-neonCyan scale-110' : 'bg-black border-gray-800'
                       }`}
                     >
-                      <Text className="text-xl">{e}</Text>
+                      <Text className="text-base">{e}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
 
-              {/* Buttons */}
-              <View className="flex-row justify-between mb-4">
-                {editingCounter ? (
+              {/* Actions */}
+              <View className="flex-row gap-2 pt-1">
+                {editingCounter && (
                   <TouchableOpacity
                     onPress={handleDelete}
-                    className="bg-gray-900 border border-red-600/70 p-4 rounded-xl flex-row items-center justify-center w-[35%]"
+                    className="bg-red-950/80 border border-red-500/60 p-3 rounded-xl items-center justify-center px-4"
                   >
-                    <FontAwesome name="trash" size={16} color="#ef4444" style={{ marginRight: 6 }} />
-                    <Text className="text-red-400 font-bold text-sm">{i18n.t('deleteCounter')}</Text>
+                    <FontAwesome name="trash" size={16} color="#ef4444" />
                   </TouchableOpacity>
-                ) : null}
-
+                )}
                 <TouchableOpacity
                   onPress={handleSave}
-                  className={`bg-neonPink p-4 rounded-xl flex-row items-center justify-center ${
-                    editingCounter ? 'w-[62%]' : 'w-full'
-                  }`}
+                  className="flex-1 bg-yellow-400 py-3 rounded-xl items-center justify-center"
                 >
-                  <FontAwesome name="check" size={16} color="#000" style={{ marginRight: 6 }} />
-                  <Text className="text-black font-extrabold text-base">{i18n.t('save')}</Text>
+                  <Text className="text-black font-extrabold text-sm uppercase tracking-wider">
+                    {i18n.t('save')}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>

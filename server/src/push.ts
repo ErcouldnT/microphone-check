@@ -10,7 +10,13 @@ export async function sendExpoPushNotifications(
 ): Promise<void> {
   if (!tokens || tokens.length === 0) return;
 
-  const validTokens = tokens.filter(t => t && t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['));
+  const validTokens = Array.from(
+    new Set(
+      tokens.filter(
+        t => t && (t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['))
+      )
+    )
+  );
   if (validTokens.length === 0) return;
 
   const messages = validTokens.map(to => ({

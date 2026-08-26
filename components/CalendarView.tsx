@@ -10,14 +10,13 @@ import { db } from '@/db/client';
 import { sessions } from '@/db/schema';
 import { getAllNotes, setNoteByDate, deleteNoteByDate } from '@/db/notes';
 import { CalendarEvent, getAllEvents, saveEvent, deleteEvent } from '@/db/events';
-import { RelationshipCounter, getAllCounters, getCountersForDate } from '@/db/counters';
+import { RelationshipCounter, getAllCounters, getCountersForDate, saveCounter, deleteCounter } from '@/db/counters';
 import { syncService, ConnectionStatus } from '@/services/syncService';
 import { UserRole, getMyRole, getMyName, getPartnerName } from '@/db/settings';
 import { getLocalDateString } from '@/utils/date';
 
 import PairingModal from './PairingModal';
-import DayNoteModal from './DayNoteModal';
-import EventModal from './EventModal';
+import DayActionModal, { ActionTab } from './DayActionModal';
 import DailyScheduleList from './DailyScheduleList';
 import RelationshipCounterCard from './RelationshipCounterCard';
 import WeekView from './WeekView';
@@ -45,10 +44,11 @@ export default function CalendarView() {
 
   // Modals
   const [pairingModalVisible, setPairingModalVisible] = useState(false);
-  const [dayNoteModalVisible, setDayNoteModalVisible] = useState(false);
-  const [eventModalVisible, setEventModalVisible] = useState(false);
+  const [dayActionModalVisible, setDayActionModalVisible] = useState(false);
+  const [dayActionModalTab, setDayActionModalTab] = useState<ActionTab>('event');
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedEventToEdit, setSelectedEventToEdit] = useState<CalendarEvent | null>(null);
+  const [selectedCounterToEdit, setSelectedCounterToEdit] = useState<RelationshipCounter | null>(null);
 
   // Sync state
   const [syncStatus, setSyncStatus] = useState<ConnectionStatus>('local');
@@ -245,27 +245,110 @@ export default function CalendarView() {
     }
   };
 
-  // Event handlers
-  const handleOpenAddEvent = (dateStr: string, time?: string) => {
+  // Unified Action Handlers
+  const handleOpenAddEvent = (dateStr: string) => {
     setSelectedDate(dateStr);
     setSelectedEventToEdit(null);
-    setEventModalVisible(true);
+    setSelectedCounterToEdit(null);
+    setDayActionModalTab('event');
+    setDayActionModalVisible(true);
   };
 
   const handleOpenEditEvent = (event: CalendarEvent) => {
+    setSelectedDate(event.startDate);
     setSelectedEventToEdit(event);
-    setEventModalVisible(true);
+    setSelectedCounterToEdit(null);
+    setDayActionModalTab('event');
+    setDayActionModalVisible(true);
   };
 
-  const handleSaveEvent = async (event: CalendarEvent) => {
-    await saveEvent(event);
-    syncService.sendEventUpdate(event);
+  const handleOpenEditNote = (dateStr: string) => {
+    setSelectedDate(dateStr);
+    setSelectedEventToEdit(null);
+    setSelectedCounterToEdit(null);
+    setDayActionModalTab('note');
+    setDayActionModalVisible(true);
+  };
+
+  const handleOpenAddCounter = () => {
+    setSelectedEventToEdit(null);
+    setSelectedCounterToEdit(null);
+    setDayActionModalTab('counter');
+    setDayActionModalVisible(true);
+  };
+
+  const handleOpenEditCounter = (counter: RelationshipCounter) => {
+    setSelectedEventToEdit(null);
+    setSelectedCounterToEdit(counter);
+    setDayActionModalTab('counter');
+    setDayActionModalVisible(true);
+  };
+
+  const handleSaveEvent = async (eventData: Omit<CalendarEvent, 'id' | 'author' | 'updatedAt'> & { id?: string }) => {
+    const fullEvent: CalendarEvent = {
+      id: eventData.id || Math.random().toString(36).substring(2, 11),
+      title: eventData.title,
+      description: eventData.description,
+      startDate: eventData.startDate,
+      endDate: eventData.endDate,
+      isAllDay: eventData.isAllDay,
+      startTime: eventData.startTime,
+      endTime: eventData.endTime,
+      color: eventData.color,
+      target: eventData.target,
+      author: syncService.getDeviceId(),
+      updatedAt: Date.now(),
+    };
+    await saveEvent(fullEvent);
+    syncService.sendEventUpdate(fullEvent);
     loadData();
   };
 
   const handleDeleteEvent = async (eventId: string) => {
     await deleteEvent(eventId);
     syncService.sendEventDelete(eventId);
+    loadData();
+  };
+
+  const handleSaveNote = async (dStr: string, content: string) => {
+    const trimmed = content.trim();
+    await setNoteByDate(dStr, trimmed);
+    setNoteMap(prev => {
+      const next = { ...prev };
+      if (!trimmed) delete next[dStr];
+      else next[dStr] = trimmed;
+      return next;
+    });
+    syncService.sendNoteUpdate(dStr, trimmed);
+  };
+
+  const handleDeleteNote = async (dStr: string) => {
+    await deleteNoteByDate(dStr);
+    setNoteMap(prev => {
+      const next = { ...prev };
+      delete next[dStr];
+      return next;
+    });
+    syncService.sendNoteUpdate(dStr, '');
+  };
+
+  const handleSaveCounter = async (counterData: Omit<RelationshipCounter, 'id' | 'updatedAt'> & { id?: string }) => {
+    const fullCounter: RelationshipCounter = {
+      id: counterData.id || Math.random().toString(36).substring(2, 11),
+      title: counterData.title,
+      targetDate: counterData.targetDate,
+      type: counterData.type,
+      icon: counterData.icon,
+      updatedAt: Date.now(),
+    };
+    await saveCounter(fullCounter);
+    syncService.sendCounterUpdate(fullCounter);
+    loadData();
+  };
+
+  const handleDeleteCounter = async (counterId: string) => {
+    await deleteCounter(counterId);
+    syncService.sendCounterDelete(counterId);
     loadData();
   };
 
@@ -322,9 +405,12 @@ export default function CalendarView() {
           onPress={() => setSelectedDate(dateStr)}
           onLongPress={() => {
             setSelectedDate(dateStr);
-            setDayNoteModalVisible(true);
+            setSelectedEventToEdit(null);
+            setSelectedCounterToEdit(null);
+            setDayActionModalTab(hasNote ? 'note' : count > 0 ? 'session' : 'event');
+            setDayActionModalVisible(true);
           }}
-          delayLongPress={350}
+          delayLongPress={300}
           className={`w-[14.2%] h-[74px] p-1 border-[0.5px] border-gray-900 justify-between ${
             isSelected
               ? 'bg-gray-900 border-neonCyan/80'
@@ -462,7 +548,11 @@ export default function CalendarView() {
         </View>
 
         {/* Milestone & Relationship Counters */}
-        <RelationshipCounterCard />
+        <RelationshipCounterCard
+          counters={countersList}
+          onAddCounter={handleOpenAddCounter}
+          onEditCounter={handleOpenEditCounter}
+        />
 
         {/* View Switcher: [ Month | Week | Day ] */}
         <View className="flex-row bg-gray-900 border border-gray-800 p-1 rounded-2xl mb-4">
@@ -608,10 +698,7 @@ export default function CalendarView() {
               onAddEvent={handleOpenAddEvent}
               onEditEvent={handleOpenEditEvent}
               dailyNote={noteMap[selectedDate]}
-              onEditNote={(dateStr) => {
-                setSelectedDate(dateStr);
-                setDayNoteModalVisible(true);
-              }}
+              onEditNote={handleOpenEditNote}
             />
           </View>
         )}
@@ -649,57 +736,28 @@ export default function CalendarView() {
             onAddEvent={handleOpenAddEvent}
             onEditEvent={handleOpenEditEvent}
             dailyNote={noteMap[selectedDate]}
-            onEditNote={(dateStr) => {
-              setSelectedDate(dateStr);
-              setDayNoteModalVisible(true);
-            }}
+            onEditNote={handleOpenEditNote}
           />
         )}
       </ScrollView>
 
-      {/* Modals */}
-      <EventModal
-        visible={eventModalVisible}
+      {/* Unified Day Action Modal (Event / Note / Session / Counter) */}
+      <DayActionModal
+        visible={dayActionModalVisible}
+        onClose={() => setDayActionModalVisible(false)}
+        selectedDate={selectedDate}
+        initialTab={dayActionModalTab}
         eventToEdit={selectedEventToEdit}
-        defaultDate={selectedDate}
-        myRole={myRole}
-        myName={myName}
-        partnerName={partnerName}
-        onClose={() => setEventModalVisible(false)}
-        onSave={handleSaveEvent}
-        onDelete={handleDeleteEvent}
-      />
-
-      <DayNoteModal
-        visible={dayNoteModalVisible}
-        date={selectedDate}
-        initialCount={sessionMap[selectedDate] || 0}
-        initialNote={noteMap[selectedDate] || ''}
-        onClose={() => setDayNoteModalVisible(false)}
-        onSave={async (dStr, newCount, noteContent) => {
-          const oldCount = sessionMap[dStr] || 0;
-          if (newCount !== oldCount) {
-            await updateSession(dStr, newCount - oldCount);
-          }
-          const trimmed = noteContent.trim();
-          await setNoteByDate(dStr, trimmed);
-          setNoteMap(prev => {
-            const next = { ...prev };
-            if (!trimmed) delete next[dStr];
-            else next[dStr] = trimmed;
-            return next;
-          });
-          syncService.sendNoteUpdate(dStr, trimmed);
-        }}
-        onDeleteNote={async (dStr) => {
-          await deleteNoteByDate(dStr);
-          setNoteMap(prev => {
-            const next = { ...prev };
-            delete next[dStr];
-            return next;
-          });
-          syncService.sendNoteUpdate(dStr, '');
-        }}
+        onSaveEvent={handleSaveEvent}
+        onDeleteEvent={handleDeleteEvent}
+        initialNoteContent={noteMap[selectedDate] || ''}
+        onSaveNote={handleSaveNote}
+        onDeleteNote={handleDeleteNote}
+        currentSessionCount={sessionMap[selectedDate] || 0}
+        onUpdateSessionCount={updateSession}
+        counterToEdit={selectedCounterToEdit}
+        onSaveCounter={handleSaveCounter}
+        onDeleteCounter={handleDeleteCounter}
       />
 
       <PairingModal

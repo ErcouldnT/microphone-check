@@ -65,3 +65,12 @@ export const getPartnerName = async (): Promise<string> => {
 export const setPartnerName = async (name: string): Promise<void> => {
   await setSetting('partner_name', name);
 };
+
+export const getApiKey = async (): Promise<string> => {
+  const key = await getSetting('api_key');
+  return key || process.env.EXPO_PUBLIC_API_KEY || 'mc_sec_2026_couple_prod';
+};
+
+export const setApiKey = async (apiKey: string): Promise<void> => {
+  await setSetting('api_key', apiKey.trim());
+};

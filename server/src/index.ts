@@ -27,6 +27,7 @@ import {
 import { roomManager } from './rooms.js';
 import { ClientMessage, ServerMessage } from './types.js';
 import { sendExpoPushNotifications } from './push.js';
+import { authMiddleware, validateWsAuth } from './auth.js';
 
 // Initialize Database
 initDb();
@@ -36,6 +37,9 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '10mb' }));
+
+// Apply Authentication Middleware for all API routes
+app.use('/api', authMiddleware);
 
 // Health Check
 app.get('/health', (req: Request, res: Response) => {
@@ -302,6 +306,12 @@ const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws: WebSocket, req) => {
   try {
+    const isAuth = validateWsAuth(req.url || '', req.headers);
+    if (!isAuth) {
+      ws.close(4001, 'Unauthorized');
+      return;
+    }
+
     const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
     const queryRoom = url.searchParams.get('room');
     const queryDevice = url.searchParams.get('deviceId');
@@ -420,7 +430,8 @@ wss.on('connection', (ws: WebSocket, req) => {
         roomManager.broadcastToRoom(room.code, noteMsg, ws);
 
         // Send push notification to devices in room that are in background/closed
-        const pushTokens = getRoomPushTokens(room.id, msg.author);
+        const senderDevice = msg.author || client?.deviceId;
+        const pushTokens = getRoomPushTokens(room.id, senderDevice, (msg as any).senderToken);
         sendExpoPushNotifications(pushTokens, {
           title: '📝 Günlük Not Güncellendi',
           body: `${msg.date} için not güncellendi: "${msg.content.substring(0, 50)}"`,
@@ -447,8 +458,9 @@ wss.on('connection', (ws: WebSocket, req) => {
         };
         roomManager.broadcastToRoom(room.code, eventMsg, ws);
 
-        // Send push notification to devices in room that are in background/closed
-        const pushTokens = getRoomPushTokens(room.id, msg.author);
+        // Send push notification to devices in room that are in background/closed (excluding sender)
+        const senderDevice = msg.author || client?.deviceId;
+        const pushTokens = getRoomPushTokens(room.id, senderDevice, (msg as any).senderToken);
         sendExpoPushNotifications(pushTokens, {
           title: '📅 Yeni Plan Eklendi',
           body: `Partnerin "${msg.event.title}" planını ekledi (${msg.event.startDate})`,
@@ -475,8 +487,9 @@ wss.on('connection', (ws: WebSocket, req) => {
         };
         roomManager.broadcastToRoom(room.code, delMsg, ws);
 
-        // Send push notification to devices in room that are in background/closed
-        const pushTokens = getRoomPushTokens(room.id, msg.author);
+        // Send push notification to devices in room that are in background/closed (excluding sender)
+        const senderDevice = msg.author || client?.deviceId;
+        const pushTokens = getRoomPushTokens(room.id, senderDevice, (msg as any).senderToken);
         sendExpoPushNotifications(pushTokens, {
           title: '🗑️ Plan Silindi',
           body: 'Takvimden bir etkinlik kaldırıldı.',
@@ -502,6 +515,15 @@ wss.on('connection', (ws: WebSocket, req) => {
           timestamp: Date.now()
         };
         roomManager.broadcastToRoom(room.code, counterMsg, ws);
+
+        // Send push notification to other devices in room
+        const senderDevice = msg.author || client?.deviceId;
+        const pushTokens = getRoomPushTokens(room.id, senderDevice, (msg as any).senderToken);
+        sendExpoPushNotifications(pushTokens, {
+          title: '⭐ Özel Gün Eklendi',
+          body: `Partnerin "${msg.counter.title}" sayacını ekledi (${msg.counter.targetDate})`,
+          data: { roomCode: room.code, counterId: msg.counter.id }
+        });
         return;
       }
 

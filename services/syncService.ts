@@ -1,4 +1,4 @@
-import { getSetting, setSetting, removeSetting } from '@/db/settings';
+import { getSetting, setSetting, removeSetting, getApiKey, setApiKey } from '@/db/settings';
 import { db } from '@/db/client';
 import { sessions, notes, events, counters } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -49,6 +49,7 @@ class SyncService {
   private reconnectTimer: any = null;
   private pingInterval: any = null;
   private deviceId: string = '';
+  private apiKey: string = '';
 
   private statusListeners: Set<StatusListener> = new Set();
   private sessionListeners: Set<SessionListener> = new Set();
@@ -70,6 +71,16 @@ class SyncService {
   }
 
   public async init() {
+    this.apiKey = await getApiKey();
+
+    const savedDeviceId = await getSetting('device_id');
+    if (savedDeviceId) {
+      this.deviceId = savedDeviceId;
+    } else {
+      this.deviceId = 'dev_' + Math.random().toString(36).substring(2, 12);
+      await setSetting('device_id', this.deviceId);
+    }
+
     const savedUrl = await getSetting('server_url');
     if (savedUrl) {
       this.serverUrl = savedUrl;
@@ -98,6 +109,19 @@ class SyncService {
 
   public getServerUrl(): string {
     return this.serverUrl;
+  }
+
+  public getApiKeyValue(): string {
+    return this.apiKey;
+  }
+
+  public async updateApiKey(key: string) {
+    this.apiKey = key.trim();
+    await setApiKey(this.apiKey);
+    if (this.roomCode) {
+      this.disconnect();
+      this.connect();
+    }
   }
 
   public async setServerUrl(url: string) {
@@ -162,7 +186,7 @@ class SyncService {
     } else if (wsUrl.startsWith('http://')) {
       wsUrl = wsUrl.replace('http://', 'ws://');
     }
-    return `${wsUrl}/ws?room=${encodeURIComponent(this.roomCode || '')}&deviceId=${encodeURIComponent(this.deviceId)}`;
+    return `${wsUrl}/ws?room=${encodeURIComponent(this.roomCode || '')}&deviceId=${encodeURIComponent(this.deviceId)}&apiKey=${encodeURIComponent(this.apiKey)}`;
   }
 
   public connect() {
@@ -439,7 +463,8 @@ class SyncService {
       roomCode: this.roomCode,
       date,
       count,
-      author: this.deviceId
+      author: this.deviceId,
+      senderToken: notificationService.getPushToken(),
     });
   }
 
@@ -451,7 +476,8 @@ class SyncService {
       roomCode: this.roomCode,
       date,
       content,
-      author: this.deviceId
+      author: this.deviceId,
+      senderToken: notificationService.getPushToken(),
     });
   }
 
@@ -465,7 +491,8 @@ class SyncService {
       type: 'UPDATE_EVENT',
       roomCode: this.roomCode,
       event,
-      author: this.deviceId
+      author: this.deviceId,
+      senderToken: notificationService.getPushToken(),
     });
   }
 
@@ -479,7 +506,8 @@ class SyncService {
       type: 'DELETE_EVENT',
       roomCode: this.roomCode,
       eventId,
-      author: this.deviceId
+      author: this.deviceId,
+      senderToken: notificationService.getPushToken(),
     });
   }
 
@@ -493,7 +521,8 @@ class SyncService {
       type: 'UPDATE_COUNTER',
       roomCode: this.roomCode,
       counter,
-      author: this.deviceId
+      author: this.deviceId,
+      senderToken: notificationService.getPushToken(),
     });
   }
 
@@ -507,7 +536,8 @@ class SyncService {
       type: 'DELETE_COUNTER',
       roomCode: this.roomCode,
       counterId,
-      author: this.deviceId
+      author: this.deviceId,
+      senderToken: notificationService.getPushToken(),
     });
   }
 
@@ -532,7 +562,10 @@ class SyncService {
 
       const res = await fetch(`${this.serverUrl}/api/rooms/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey,
+        },
         body: JSON.stringify({
           initialEntries,
           initialNotes,
@@ -563,7 +596,10 @@ class SyncService {
       const formattedCode = roomCode.toUpperCase().trim();
       const res = await fetch(`${this.serverUrl}/api/rooms/join`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey,
+        },
         body: JSON.stringify({ roomCode: formattedCode })
       });
 
@@ -594,7 +630,11 @@ class SyncService {
   public async syncWithServer(): Promise<void> {
     if (!this.roomCode) return;
     try {
-      const res = await fetch(`${this.serverUrl}/api/rooms/${this.roomCode}/sync`);
+      const res = await fetch(`${this.serverUrl}/api/rooms/${this.roomCode}/sync`, {
+        headers: {
+          'X-API-Key': this.apiKey,
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -625,7 +665,10 @@ class SyncService {
 
       const res = await fetch(`${this.serverUrl}/api/rooms/${this.roomCode}/push-all`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey,
+        },
         body: JSON.stringify({
           entries,
           notes: notesList,

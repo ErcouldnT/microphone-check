@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { getApiKey } from '@/db/settings';
 
 const DEFAULT_PROJECT_ID = 'f377d6e6-6992-46e0-878c-d96688e136a8';
 
@@ -117,9 +118,13 @@ class NotificationService {
       }
 
       const cleanUrl = serverUrl.trim().replace(/\/+$/, '');
+      const apiKey = await getApiKey();
       const res = await fetch(`${cleanUrl}/api/rooms/${encodeURIComponent(roomCode)}/register-push-token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+        },
         body: JSON.stringify({
           deviceId,
           pushToken: token,

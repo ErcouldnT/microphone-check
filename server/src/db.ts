@@ -462,6 +462,10 @@ export function bulkUpsertRoomCounters(roomId: string, counters: RelationshipCou
 export function upsertRoomPushToken(roomId: string, deviceId: string, pushToken: string, platform?: string) {
   const now = Date.now();
   const id = crypto.randomUUID();
+  
+  // Clean up any stale records with the same token to prevent duplicate sends across devices
+  db.prepare('DELETE FROM room_push_tokens WHERE push_token = ?').run(pushToken);
+
   const stmt = db.prepare(`
     INSERT INTO room_push_tokens (id, room_id, device_id, push_token, platform, updated_at)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -473,8 +477,8 @@ export function upsertRoomPushToken(roomId: string, deviceId: string, pushToken:
   stmt.run(id, roomId, deviceId, pushToken, platform || null, now);
 }
 
-export function getRoomPushTokens(roomId: string, excludeDeviceId?: string): string[] {
-  let query = 'SELECT push_token FROM room_push_tokens WHERE room_id = ?';
+export function getRoomPushTokens(roomId: string, excludeDeviceId?: string, excludePushToken?: string): string[] {
+  let query = 'SELECT DISTINCT push_token FROM room_push_tokens WHERE room_id = ?';
   const params: any[] = [roomId];
 
   if (excludeDeviceId) {
@@ -482,11 +486,16 @@ export function getRoomPushTokens(roomId: string, excludeDeviceId?: string): str
     params.push(excludeDeviceId);
   }
 
+  if (excludePushToken) {
+    query += ' AND push_token != ?';
+    params.push(excludePushToken);
+  }
+
   const rows = db.prepare(query).all(...params) as Array<{ push_token: string }>;
-  return rows.map(r => r.push_token);
+  return Array.from(new Set(rows.map(r => r.push_token).filter(Boolean)));
 }
 
 export function getAllPushTokens(): string[] {
   const rows = db.prepare('SELECT DISTINCT push_token FROM room_push_tokens').all() as Array<{ push_token: string }>;
-  return rows.map(r => r.push_token);
+  return Array.from(new Set(rows.map(r => r.push_token).filter(Boolean)));
 }

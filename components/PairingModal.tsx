@@ -27,6 +27,7 @@ export default function PairingModal({ visible, onClose }: PairingModalProps) {
   const [activeRoom, setActiveRoom] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>('local');
   const [serverUrlInput, setServerUrlInput] = useState(syncService.getServerUrl());
+  const [apiKeyInput, setApiKeyInput] = useState(syncService.getApiKeyValue());
   const [showServerConfig, setShowServerConfig] = useState(false);
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function PairingModal({ visible, onClose }: PairingModalProps) {
       setActiveRoom(syncService.getRoomCode());
       setStatus(syncService.getStatus());
       setServerUrlInput(syncService.getServerUrl());
+      setApiKeyInput(syncService.getApiKeyValue());
     }
 
     const unsubStatus = syncService.addStatusListener((newStatus) => {
@@ -124,6 +126,7 @@ export default function PairingModal({ visible, onClose }: PairingModalProps) {
   const handleSaveServerUrl = async () => {
     if (!serverUrlInput.trim()) return;
     await syncService.setServerUrl(serverUrlInput.trim());
+    await syncService.updateApiKey(apiKeyInput.trim());
     Alert.alert(i18n.t('serverSettings'), i18n.t('save'));
     setShowServerConfig(false);
   };
@@ -331,6 +334,19 @@ export default function PairingModal({ visible, onClose }: PairingModalProps) {
                     autoCorrect={false}
                     className="bg-black border border-gray-700 text-gray-200 text-xs p-2 rounded mb-2"
                   />
+
+                  <Text className="text-gray-400 text-xs mb-1">API Key (Güvenlik Anahtarı)</Text>
+                  <TextInput
+                    value={apiKeyInput}
+                    onChangeText={setApiKeyInput}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    secureTextEntry
+                    placeholder="API Anahtarı"
+                    placeholderTextColor="#555"
+                    className="bg-black border border-gray-700 text-gray-200 text-xs p-2 rounded mb-2"
+                  />
+
                   <TouchableOpacity
                     onPress={handleSaveServerUrl}
                     className="bg-gray-800 p-2 rounded items-center"
