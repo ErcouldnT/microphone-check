@@ -57,11 +57,18 @@ const translations = {
         monthView: "Aylık",
         weekView: "Haftalık",
         dayView: "Günlük",
-        // Assignees
+        today: "Bugün",
+        // Assignees & Roles
         all: "Tümü",
         forYou: "Sen",
         forPartner: "Partnerin",
         forBoth: "İkimiz",
+        forMale: "Erkek",
+        forFemale: "Kadın",
+        myProfile: "Profilim & Roller",
+        whoAreYou: "Bu cihazı kim kullanıyor?",
+        maleOption: "Erkek 👨",
+        femaleOption: "Kadın 👩",
         // Event Modal
         newEvent: "Yeni Etkinlik / Plan",
         editEvent: "Etkinliği Düzenle",
@@ -101,6 +108,7 @@ const translations = {
         daysLeft: "gün kaldı",
         todayIsTheDay: "Bugün o gün! 🎉",
         deleteCounter: "Sayacı Sil",
+        milestone: "Önemli Gün & Sayaç",
         // Notifications
         scheduleUpdated: "Takvim Güncellendi",
         newPlanAdded: "Yeni bir plan eklendi.",
@@ -166,11 +174,18 @@ const translations = {
         monthView: "Month",
         weekView: "Week",
         dayView: "Day",
-        // Assignees
+        today: "Today",
+        // Assignees & Roles
         all: "All",
         forYou: "You",
         forPartner: "Partner",
         forBoth: "Both of Us",
+        forMale: "Male",
+        forFemale: "Female",
+        myProfile: "My Profile & Role",
+        whoAreYou: "Who is using this device?",
+        maleOption: "Male 👨",
+        femaleOption: "Female 👩",
         // Event Modal
         newEvent: "New Event / Plan",
         editEvent: "Edit Event",
@@ -210,6 +225,7 @@ const translations = {
         daysLeft: "days left",
         todayIsTheDay: "Today is the day! 🎉",
         deleteCounter: "Delete Counter",
+        milestone: "Milestone & Counter",
         // Notifications
         scheduleUpdated: "Schedule Updated",
         newPlanAdded: "A new plan was added.",
@@ -275,11 +291,18 @@ const translations = {
         monthView: "Месяц",
         weekView: "Неделя",
         dayView: "День",
-        // Assignees
+        today: "Сегодня",
+        // Assignees & Roles
         all: "Все",
         forYou: "Ты",
         forPartner: "Партнер",
         forBoth: "Мы вместе",
+        forMale: "Мужчина",
+        forFemale: "Женщина",
+        myProfile: "Мой профиль и роли",
+        whoAreYou: "Кто использует это устройство?",
+        maleOption: "Мужчина 👨",
+        femaleOption: "Женщина 👩",
         // Event Modal
         newEvent: "Новое событие / План",
         editEvent: "Редактировать событие",
@@ -300,7 +323,7 @@ const translations = {
         eventSaved: "Событие сохранено!",
         eventDeleted: "Событие удалено.",
         // Daily Schedule List
-        scheduleForDay: "План на день",
+        scheduleForDay: "Пlan на день",
         noEventsForDay: "На этот день событий нет.",
         addEvent: "Добавить событие",
         // Relationship Counters
@@ -319,6 +342,7 @@ const translations = {
         daysLeft: "дней осталось",
         todayIsTheDay: "Сегодня тот самый день! 🎉",
         deleteCounter: "Удалить счетчик",
+        milestone: "Важная дата",
         // Notifications
         scheduleUpdated: "Расписание обновлено",
         newPlanAdded: "Добавлено новое событие.",

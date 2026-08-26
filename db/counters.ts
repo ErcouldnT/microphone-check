@@ -27,6 +27,20 @@ export const getDaysDifference = (targetDateStr: string, type: 'since' | 'until'
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 };
 
+export const getCountersForDate = (countersList: RelationshipCounter[], dateStr: string): RelationshipCounter[] => {
+  if (!dateStr || !Array.isArray(countersList)) return [];
+  return countersList.filter(c => {
+    if (!c.targetDate) return false;
+    if (c.type === 'until') {
+      return c.targetDate === dateStr;
+    }
+    // 'since': Matches exact start date OR yearly anniversary (same month & day)
+    const exactMatch = c.targetDate === dateStr;
+    const yearlyMatch = c.targetDate.substring(5) === dateStr.substring(5) && dateStr >= c.targetDate;
+    return exactMatch || yearlyMatch;
+  });
+};
+
 export const getAllCounters = async (): Promise<RelationshipCounter[]> => {
   try {
     const list = await db.select().from(counters);

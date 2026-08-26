@@ -10,7 +10,10 @@ import { db } from '@/db/client';
 import { sessions } from '@/db/schema';
 import { getAllNotes, setNoteByDate, deleteNoteByDate } from '@/db/notes';
 import { CalendarEvent, getAllEvents, saveEvent, deleteEvent } from '@/db/events';
+import { RelationshipCounter, getAllCounters, getCountersForDate } from '@/db/counters';
 import { syncService, ConnectionStatus } from '@/services/syncService';
+import { UserRole, getMyRole, getMyName, getPartnerName } from '@/db/settings';
+import { getLocalDateString } from '@/utils/date';
 
 import PairingModal from './PairingModal';
 import DayNoteModal from './DayNoteModal';
@@ -19,26 +22,32 @@ import DailyScheduleList from './DailyScheduleList';
 import RelationshipCounterCard from './RelationshipCounterCard';
 import WeekView from './WeekView';
 import DayView from './DayView';
+import ProfileRoleModal from './ProfileRoleModal';
 import InAppNotificationToast from './InAppNotificationToast';
 
 const getDaysShort = () => i18n.t('daysShort') as unknown as string[];
 
 export default function CalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
+  const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString());
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
   const [filterTarget, setFilterTarget] = useState<'all' | 'you' | 'partner' | 'both'>('all');
+
+  // User Role & Profile
+  const [myRole, setMyRoleState] = useState<UserRole>('male');
+  const [myName, setMyNameState] = useState<string>('');
+  const [partnerName, setPartnerNameState] = useState<string>('');
 
   const [sessionMap, setSessionMap] = useState<Record<string, number>>({});
   const [noteMap, setNoteMap] = useState<Record<string, string>>({});
   const [eventsList, setEventsList] = useState<CalendarEvent[]>([]);
+  const [countersList, setCountersList] = useState<RelationshipCounter[]>([]);
 
   // Modals
   const [pairingModalVisible, setPairingModalVisible] = useState(false);
   const [dayNoteModalVisible, setDayNoteModalVisible] = useState(false);
   const [eventModalVisible, setEventModalVisible] = useState(false);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedEventToEdit, setSelectedEventToEdit] = useState<CalendarEvent | null>(null);
 
   // Sync state
@@ -51,7 +60,15 @@ export default function CalendarView() {
 
   const loadData = async () => {
     try {
-      // 1. Sessions
+      // 1. User Profile
+      const savedRole = await getMyRole();
+      const savedName = await getMyName();
+      const savedPartnerName = await getPartnerName();
+      setMyRoleState(savedRole);
+      setMyNameState(savedName);
+      setPartnerNameState(savedPartnerName);
+
+      // 2. Sessions
       const allSessions = await db.select().from(sessions);
       const sMap: Record<string, number> = {};
       allSessions.forEach(s => {
@@ -60,7 +77,7 @@ export default function CalendarView() {
       setSessionMap(sMap);
       calculateMonthStats(sMap, year, month);
 
-      // 2. Notes
+      // 3. Notes
       const allNotes = await getAllNotes();
       const nMap: Record<string, string> = {};
       allNotes.forEach(n => {
@@ -68,9 +85,13 @@ export default function CalendarView() {
       });
       setNoteMap(nMap);
 
-      // 3. Events
+      // 4. Events
       const allEv = await getAllEvents();
       setEventsList(allEv);
+
+      // 5. Counters
+      const allCnt = await getAllCounters();
+      setCountersList(allCnt);
     } catch (e) {
       console.error('Error loading calendar data:', e);
     }
@@ -121,6 +142,10 @@ export default function CalendarView() {
       loadData();
     });
 
+    const unsubCounter = syncService.addCounterListener(() => {
+      loadData();
+    });
+
     const unsubSync = syncService.addSyncListener(() => {
       loadData();
       setRoomCode(syncService.getRoomCode());
@@ -135,6 +160,7 @@ export default function CalendarView() {
       unsubSession();
       unsubNote();
       unsubEvent();
+      unsubCounter();
       unsubSync();
       unsubStatus();
     };
@@ -160,6 +186,20 @@ export default function CalendarView() {
     const newDate = new Date(year, month + 1, 1);
     setCurrentDate(newDate);
     calculateMonthStats(sessionMap, newDate.getFullYear(), newDate.getMonth());
+  };
+
+  // View mode tab switcher with instant focus on current week / today
+  const handleSwitchViewMode = (mode: 'month' | 'week' | 'day') => {
+    setViewMode(mode);
+    const today = new Date();
+    const todayStr = getLocalDateString(today);
+
+    if (mode === 'week') {
+      setCurrentDate(today);
+    } else if (mode === 'day') {
+      setCurrentDate(today);
+      setSelectedDate(todayStr);
+    }
   };
 
   // Session update helper
@@ -229,15 +269,29 @@ export default function CalendarView() {
     loadData();
   };
 
-  // Filter events by target
+  // Filter events by target with role/gender awareness!
+  const partnerRole: UserRole = myRole === 'male' ? 'female' : 'male';
+
   const filteredEvents = eventsList.filter(e => {
     if (filterTarget === 'all') return true;
-    return e.target === filterTarget;
+    if (filterTarget === 'both') return e.target === 'both';
+
+    if (filterTarget === 'you') {
+      return e.target === myRole || e.target === 'you' || e.target === 'both';
+    }
+
+    if (filterTarget === 'partner') {
+      return e.target === partnerRole || e.target === 'partner' || e.target === 'both';
+    }
+
+    return true;
   });
 
   const selectedDayEvents = filteredEvents.filter(
     e => e.startDate <= selectedDate && e.endDate >= selectedDate
   );
+
+  const selectedDayCounters = getCountersForDate(countersList, selectedDate);
 
   // Month grid rendering
   const renderMonthDays = () => {
@@ -246,16 +300,20 @@ export default function CalendarView() {
       days.push(<View key={`blank-${i}`} className="w-[14.2%] h-[74px] p-0.5" />);
     }
 
+    const todayStr = getLocalDateString(new Date());
+
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const count = sessionMap[dateStr] || 0;
       const hasNote = Boolean(noteMap[dateStr]);
       const isSelected = dateStr === selectedDate;
-      const isToday = new Date().toDateString() === new Date(year, month, d).toDateString();
+      const isToday = dateStr === todayStr;
 
       const dayEvents = filteredEvents.filter(
         e => e.startDate <= dateStr && e.endDate >= dateStr
       );
+
+      const dayCounters = getCountersForDate(countersList, dateStr);
 
       days.push(
         <TouchableOpacity
@@ -300,9 +358,23 @@ export default function CalendarView() {
             </View>
           </View>
 
-          {/* Event Pills inside Day Cell (TimeTree Style) */}
+          {/* Event & Counter Pills inside Day Cell */}
           <View className="space-y-0.5 overflow-hidden">
-            {dayEvents.slice(0, 2).map(e => (
+            {/* Automatic Milestone Badges */}
+            {dayCounters.slice(0, 1).map(c => (
+              <View
+                key={c.id}
+                className="bg-pink-950/80 border border-neonPink/60 px-1 py-0.5 rounded-[3px] mb-0.5 flex-row items-center"
+              >
+                <Text className="text-[7px] text-white font-extrabold mr-0.5">{c.icon || '❤️'}</Text>
+                <Text className="text-[7px] font-extrabold text-neonPink flex-1" numberOfLines={1}>
+                  {c.title}
+                </Text>
+              </View>
+            ))}
+
+            {/* Event Pills */}
+            {dayEvents.slice(0, dayCounters.length > 0 ? 1 : 2).map(e => (
               <View
                 key={e.id}
                 style={{ backgroundColor: e.color || '#00FFFF' }}
@@ -317,9 +389,9 @@ export default function CalendarView() {
               </View>
             ))}
 
-            {dayEvents.length > 2 && (
+            {(dayEvents.length + dayCounters.length) > 2 && (
               <Text className="text-[8px] text-gray-500 font-bold">
-                +{dayEvents.length - 2}
+                +{(dayEvents.length + dayCounters.length) - 2}
               </Text>
             )}
           </View>
@@ -359,6 +431,9 @@ export default function CalendarView() {
     );
   };
 
+  const myFilterLabel = myName ? `${myName} (Sen)` : `${i18n.t('forYou')} (${myRole === 'male' ? '👨' : '👩'})`;
+  const partnerFilterLabel = partnerName ? `${partnerName} (Partnerin)` : `${i18n.t('forPartner')} (${partnerRole === 'male' ? '👨' : '👩'})`;
+
   return (
     <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
       <InAppNotificationToast />
@@ -366,9 +441,23 @@ export default function CalendarView() {
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1 p-4">
         {/* Top Header Bar */}
         <View className="flex-row justify-between items-center mb-4">
-          <Text className="text-white font-extrabold text-lg tracking-wider">
-            MICROPHONE<Text className="text-neonCyan">CHECK</Text>
-          </Text>
+          <View className="flex-row items-center">
+            <Text className="text-white font-extrabold text-lg tracking-wider mr-2">
+              MICROPHONE<Text className="text-neonCyan">CHECK</Text>
+            </Text>
+
+            {/* Profile Role Quick Pill */}
+            <TouchableOpacity
+              onPress={() => setProfileModalVisible(true)}
+              className="bg-gray-900 border border-gray-800 px-2.5 py-1 rounded-full flex-row items-center"
+            >
+              <Text className="text-xs mr-1">{myRole === 'male' ? '👨' : '👩'}</Text>
+              <Text className="text-gray-300 text-[11px] font-bold">
+                {myName || (myRole === 'male' ? i18n.t('forMale') : i18n.t('forFemale'))}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {getStatusIndicator()}
         </View>
 
@@ -378,7 +467,7 @@ export default function CalendarView() {
         {/* View Switcher: [ Month | Week | Day ] */}
         <View className="flex-row bg-gray-900 border border-gray-800 p-1 rounded-2xl mb-4">
           <TouchableOpacity
-            onPress={() => setViewMode('month')}
+            onPress={() => handleSwitchViewMode('month')}
             className={`flex-1 py-2 rounded-xl items-center flex-row justify-center ${
               viewMode === 'month' ? 'bg-cyan-950 border border-neonCyan' : ''
             }`}
@@ -395,7 +484,7 @@ export default function CalendarView() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setViewMode('week')}
+            onPress={() => handleSwitchViewMode('week')}
             className={`flex-1 py-2 rounded-xl items-center flex-row justify-center ${
               viewMode === 'week' ? 'bg-cyan-950 border border-neonCyan' : ''
             }`}
@@ -412,7 +501,7 @@ export default function CalendarView() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setViewMode('day')}
+            onPress={() => handleSwitchViewMode('day')}
             className={`flex-1 py-2 rounded-xl items-center flex-row justify-center ${
               viewMode === 'day' ? 'bg-cyan-950 border border-neonCyan' : ''
             }`}
@@ -429,7 +518,7 @@ export default function CalendarView() {
           </TouchableOpacity>
         </View>
 
-        {/* Member / Assignee Filter Pills (TimeTree style) */}
+        {/* Member / Assignee Filter Pills */}
         <View className="flex-row mb-4">
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
             <TouchableOpacity
@@ -450,7 +539,7 @@ export default function CalendarView() {
               }`}
             >
               <Text className={`text-xs font-bold ${filterTarget === 'you' ? 'text-neonCyan' : 'text-gray-400'}`}>
-                👤 {i18n.t('forYou')}
+                👤 {myFilterLabel}
               </Text>
             </TouchableOpacity>
 
@@ -461,7 +550,7 @@ export default function CalendarView() {
               }`}
             >
               <Text className={`text-xs font-bold ${filterTarget === 'partner' ? 'text-neonPink' : 'text-gray-400'}`}>
-                💖 {i18n.t('forPartner')}
+                💖 {partnerFilterLabel}
               </Text>
             </TouchableOpacity>
 
@@ -512,6 +601,10 @@ export default function CalendarView() {
             <DailyScheduleList
               selectedDate={selectedDate}
               events={selectedDayEvents}
+              counters={selectedDayCounters}
+              myRole={myRole}
+              myName={myName}
+              partnerName={partnerName}
               onAddEvent={handleOpenAddEvent}
               onEditEvent={handleOpenEditEvent}
               dailyNote={noteMap[selectedDate]}
@@ -530,7 +623,11 @@ export default function CalendarView() {
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             events={filteredEvents}
+            counters={countersList}
             sessionMap={sessionMap}
+            myRole={myRole}
+            myName={myName}
+            partnerName={partnerName}
             onAddEvent={handleOpenAddEvent}
             onEditEvent={handleOpenEditEvent}
           />
@@ -540,11 +637,15 @@ export default function CalendarView() {
           <DayView
             currentDate={new Date(selectedDate)}
             onDateChange={(d) => {
-              const str = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              const str = getLocalDateString(d);
               setSelectedDate(str);
             }}
             events={filteredEvents}
+            counters={countersList}
             sessionMap={sessionMap}
+            myRole={myRole}
+            myName={myName}
+            partnerName={partnerName}
             onAddEvent={handleOpenAddEvent}
             onEditEvent={handleOpenEditEvent}
             dailyNote={noteMap[selectedDate]}
@@ -561,6 +662,9 @@ export default function CalendarView() {
         visible={eventModalVisible}
         eventToEdit={selectedEventToEdit}
         defaultDate={selectedDate}
+        myRole={myRole}
+        myName={myName}
+        partnerName={partnerName}
         onClose={() => setEventModalVisible(false)}
         onSave={handleSaveEvent}
         onDelete={handleDeleteEvent}
@@ -601,6 +705,16 @@ export default function CalendarView() {
       <PairingModal
         visible={pairingModalVisible}
         onClose={() => setPairingModalVisible(false)}
+      />
+
+      <ProfileRoleModal
+        visible={profileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
+        onSaved={(newRole, newMyName, newPartnerName) => {
+          setMyRoleState(newRole);
+          setMyNameState(newMyName);
+          setPartnerNameState(newPartnerName);
+        }}
       />
     </SafeAreaView>
   );

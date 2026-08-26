@@ -12,7 +12,7 @@ export interface CalendarEvent {
   endTime?: string;   // HH:mm
   isAllDay: boolean;
   color: string;     // e.g. #00FFFF, #FF007F, #FACC15, #10B981, #A855F7
-  target: 'you' | 'partner' | 'both';
+  target: 'male' | 'female' | 'both' | 'you' | 'partner';
   author?: string;
   createdAt?: number;
   updatedAt?: number;

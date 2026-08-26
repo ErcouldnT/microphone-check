@@ -14,11 +14,15 @@ import {
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
+import { UserRole } from '@/db/settings';
 
 interface EventModalProps {
   visible: boolean;
   eventToEdit?: CalendarEvent | null;
   defaultDate?: string; // YYYY-MM-DD
+  myRole?: UserRole;
+  myName?: string;
+  partnerName?: string;
   onClose: () => void;
   onSave: (event: CalendarEvent) => void;
   onDelete?: (eventId: string) => void;
@@ -38,6 +42,9 @@ export default function EventModal({
   visible,
   eventToEdit,
   defaultDate,
+  myRole = 'male',
+  myName = '',
+  partnerName = '',
   onClose,
   onSave,
   onDelete,
@@ -49,8 +56,10 @@ export default function EventModal({
   const [isAllDay, setIsAllDay] = useState(true);
   const [startTime, setStartTime] = useState('12:00');
   const [endTime, setEndTime] = useState('13:00');
-  const [target, setTarget] = useState<'you' | 'partner' | 'both'>('you');
+  const [target, setTarget] = useState<'male' | 'female' | 'both'>(myRole);
   const [color, setColor] = useState('#00FFFF');
+
+  const partnerRole: UserRole = myRole === 'male' ? 'female' : 'male';
 
   useEffect(() => {
     if (visible) {
@@ -62,7 +71,19 @@ export default function EventModal({
         setIsAllDay(eventToEdit.isAllDay ?? true);
         setStartTime(eventToEdit.startTime || '12:00');
         setEndTime(eventToEdit.endTime || '13:00');
-        setTarget(eventToEdit.target || 'you');
+        
+        // Normalize target (backward compatibility for 'you' / 'partner')
+        let normalizedTarget: 'male' | 'female' | 'both' = 'both';
+        if (eventToEdit.target === 'both') {
+          normalizedTarget = 'both';
+        } else if (eventToEdit.target === 'male' || eventToEdit.target === 'female') {
+          normalizedTarget = eventToEdit.target;
+        } else if (eventToEdit.target === 'you') {
+          normalizedTarget = myRole;
+        } else if (eventToEdit.target === 'partner') {
+          normalizedTarget = partnerRole;
+        }
+        setTarget(normalizedTarget);
         setColor(eventToEdit.color || '#00FFFF');
       } else {
         const initialDate = defaultDate || new Date().toISOString().split('T')[0];
@@ -73,18 +94,17 @@ export default function EventModal({
         setIsAllDay(true);
         setStartTime('12:00');
         setEndTime('13:00');
-        setTarget('you');
-        setColor('#00FFFF');
+        setTarget(myRole);
+        setColor(myRole === 'male' ? '#00FFFF' : '#FF007F');
       }
     }
-  }, [visible, eventToEdit, defaultDate]);
+  }, [visible, eventToEdit, defaultDate, myRole]);
 
-  const handleTargetChange = (newTarget: 'you' | 'partner' | 'both') => {
+  const handleTargetChange = (newTarget: 'male' | 'female' | 'both') => {
     setTarget(newTarget);
     if (!eventToEdit) {
-      // Set sensible default color when target changes
-      if (newTarget === 'you') setColor('#00FFFF');
-      else if (newTarget === 'partner') setColor('#FF007F');
+      if (newTarget === 'male') setColor('#00FFFF');
+      else if (newTarget === 'female') setColor('#FF007F');
       else if (newTarget === 'both') setColor('#FACC15');
     }
   };
@@ -136,6 +156,9 @@ export default function EventModal({
     );
   };
 
+  const myLabel = myName ? `${myName} (${myRole === 'male' ? '👨' : '👩'})` : (myRole === 'male' ? `${i18n.t('forYou')} (👨 ${i18n.t('forMale')})` : `${i18n.t('forYou')} (👩 ${i18n.t('forFemale')})`);
+  const partnerLabel = partnerName ? `${partnerName} (${partnerRole === 'male' ? '👨' : '👩'})` : (partnerRole === 'male' ? `${i18n.t('forPartner')} (👨 ${i18n.t('forMale')})` : `${i18n.t('forPartner')} (👩 ${i18n.t('forFemale')})`);
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
@@ -174,41 +197,44 @@ export default function EventModal({
               />
             </View>
 
-            {/* Target Selector (You / Partner / Both) */}
+            {/* Target Selector (My Role vs Partner Role vs Both) */}
             <View className="mb-4">
               <Text className="text-gray-400 text-xs uppercase font-bold tracking-wider mb-2">
                 {i18n.t('assignTo')}
               </Text>
               <View className="flex-row bg-gray-900 border border-gray-800 p-1 rounded-xl">
+                {/* My Role (Sen) */}
                 <TouchableOpacity
-                  onPress={() => handleTargetChange('you')}
+                  onPress={() => handleTargetChange(myRole)}
                   className={`flex-1 py-2.5 rounded-lg items-center ${
-                    target === 'you' ? 'bg-cyan-950 border border-neonCyan' : ''
+                    target === myRole ? (myRole === 'male' ? 'bg-cyan-950 border border-neonCyan' : 'bg-pink-950 border border-neonPink') : ''
                   }`}
                 >
-                  <Text className={`font-bold text-xs ${target === 'you' ? 'text-neonCyan' : 'text-gray-400'}`}>
-                    👤 {i18n.t('forYou')}
+                  <Text className={`font-bold text-xs ${target === myRole ? (myRole === 'male' ? 'text-neonCyan' : 'text-neonPink') : 'text-gray-400'}`} numberOfLines={1}>
+                    {myLabel}
                   </Text>
                 </TouchableOpacity>
 
+                {/* Partner Role (Partnerin) */}
                 <TouchableOpacity
-                  onPress={() => handleTargetChange('partner')}
+                  onPress={() => handleTargetChange(partnerRole)}
                   className={`flex-1 py-2.5 rounded-lg items-center ${
-                    target === 'partner' ? 'bg-pink-950 border border-neonPink' : ''
+                    target === partnerRole ? (partnerRole === 'male' ? 'bg-cyan-950 border border-neonCyan' : 'bg-pink-950 border border-neonPink') : ''
                   }`}
                 >
-                  <Text className={`font-bold text-xs ${target === 'partner' ? 'text-neonPink' : 'text-gray-400'}`}>
-                    💖 {i18n.t('forPartner')}
+                  <Text className={`font-bold text-xs ${target === partnerRole ? (partnerRole === 'male' ? 'text-neonCyan' : 'text-neonPink') : 'text-gray-400'}`} numberOfLines={1}>
+                    {partnerLabel}
                   </Text>
                 </TouchableOpacity>
 
+                {/* Both (İkimiz) */}
                 <TouchableOpacity
                   onPress={() => handleTargetChange('both')}
                   className={`flex-1 py-2.5 rounded-lg items-center ${
                     target === 'both' ? 'bg-yellow-950 border border-yellow-400' : ''
                   }`}
                 >
-                  <Text className={`font-bold text-xs ${target === 'both' ? 'text-yellow-400' : 'text-gray-400'}`}>
+                  <Text className={`font-bold text-xs ${target === 'both' ? 'text-yellow-400' : 'text-gray-400'}`} numberOfLines={1}>
                     ✨ {i18n.t('forBoth')}
                   </Text>
                 </TouchableOpacity>

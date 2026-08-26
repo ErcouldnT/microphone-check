@@ -3,12 +3,19 @@ import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
+import { RelationshipCounter, getCountersForDate, getDaysDifference } from '@/db/counters';
+import { UserRole } from '@/db/settings';
+import { getLocalDateString, parseLocalDate } from '@/utils/date';
 
 interface DayViewProps {
   currentDate: Date;
   onDateChange: (date: Date) => void;
   events: CalendarEvent[];
+  counters?: RelationshipCounter[];
   sessionMap: Record<string, number>;
+  myRole?: UserRole;
+  myName?: string;
+  partnerName?: string;
   onAddEvent: (dateStr: string, time?: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
   dailyNote?: string;
@@ -25,16 +32,22 @@ export default function DayView({
   currentDate,
   onDateChange,
   events,
+  counters = [],
   sessionMap,
+  myRole = 'male',
+  myName = '',
+  partnerName = '',
   onAddEvent,
   onEditEvent,
   dailyNote,
   onEditNote,
 }: DayViewProps) {
-  const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+  const dateStr = getLocalDateString(currentDate);
+  const todayStr = getLocalDateString(new Date());
   const micCount = sessionMap[dateStr] || 0;
 
   const dayEvents = events.filter(e => e.startDate <= dateStr && e.endDate >= dateStr);
+  const dayCounters = getCountersForDate(counters, dateStr);
   const allDayEvents = dayEvents.filter(e => e.isAllDay);
   const timedEvents = dayEvents.filter(e => !e.isAllDay);
 
@@ -50,11 +63,24 @@ export default function DayView({
     onDateChange(next);
   };
 
+  const handleToday = () => {
+    onDateChange(new Date());
+  };
+
   const getFormattedDate = () => {
     const day = currentDate.getDate();
     const month = i18n.t(`months.${currentDate.getMonth()}`);
     const year = currentDate.getFullYear();
     return `${day} ${month} ${year}`;
+  };
+
+  const getTargetBadgeLabel = (target: string) => {
+    if (target === 'both') return i18n.t('forBoth');
+    if (target === 'male') return myRole === 'male' ? (myName || `${i18n.t('forYou')} 👨`) : (partnerName || `${i18n.t('forPartner')} 👨`);
+    if (target === 'female') return myRole === 'female' ? (myName || `${i18n.t('forYou')} 👩`) : (partnerName || `${i18n.t('forPartner')} 👩`);
+    if (target === 'you') return i18n.t('forYou');
+    if (target === 'partner') return i18n.t('forPartner');
+    return target;
   };
 
   return (
@@ -65,15 +91,18 @@ export default function DayView({
           <FontAwesome name="chevron-left" size={20} color="#00FFFF" />
         </TouchableOpacity>
 
-        <View className="items-center">
+        <TouchableOpacity onPress={handleToday} className="items-center">
           <Text className="text-white font-extrabold text-lg">{getFormattedDate()}</Text>
+          {dateStr === todayStr && (
+            <Text className="text-neonCyan text-[11px] font-bold mt-0.5">{i18n.t('today')}</Text>
+          )}
           {micCount > 0 && (
             <View className="flex-row items-center bg-cyan-950/80 px-2.5 py-0.5 rounded-full border border-neonCyan/40 mt-1">
               <FontAwesome name="microphone" size={10} color="#00FFFF" style={{ marginRight: 4 }} />
               <Text className="text-neonCyan text-[11px] font-bold">{micCount} mikrofon</Text>
             </View>
           )}
-        </View>
+        </TouchableOpacity>
 
         <TouchableOpacity onPress={handleNextDay} className="p-2">
           <FontAwesome name="chevron-right" size={20} color="#00FFFF" />
@@ -81,6 +110,38 @@ export default function DayView({
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+        {/* Milestone Card on this Day */}
+        {dayCounters.length > 0 && (
+          <View className="mb-4 space-y-2">
+            {dayCounters.map(c => {
+              const diff = getDaysDifference(c.targetDate, c.type);
+              const isUntil = c.type === 'until';
+
+              return (
+                <View
+                  key={c.id}
+                  className="bg-pink-950/40 border border-neonPink/60 p-3.5 rounded-2xl flex-row items-center justify-between mb-2"
+                >
+                  <View className="flex-row items-center flex-1 mr-2">
+                    <Text className="text-2xl mr-2.5">{c.icon || '❤️'}</Text>
+                    <View className="flex-1">
+                      <Text className="text-neonPink font-extrabold text-sm">{c.title}</Text>
+                      <Text className="text-gray-400 text-xs mt-0.5">
+                        {isUntil
+                          ? (diff === 0 ? i18n.t('todayIsTheDay') : `${Math.abs(diff)} ${i18n.t('daysLeft')}`)
+                          : (diff === 0 ? i18n.t('todayIsTheDay') : `${Math.abs(diff)} ${i18n.t('daysAgo')}`)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View className="bg-pink-950 border border-neonPink px-2.5 py-1 rounded-full">
+                    <Text className="text-neonPink text-[10px] font-bold">{i18n.t('milestone')}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {/* Daily Note Banner */}
         {dailyNote ? (
           <TouchableOpacity
@@ -120,7 +181,14 @@ export default function DayView({
                     </Text>
                   )}
                 </View>
-                <FontAwesome name="chevron-right" size={10} color={e.color || '#00FFFF'} />
+                <View
+                  className="px-2 py-0.5 rounded text-[9px]"
+                  style={{ backgroundColor: `${e.color || '#00FFFF'}30` }}
+                >
+                  <Text style={{ color: e.color || '#00FFFF' }} className="text-[10px] font-bold">
+                    {getTargetBadgeLabel(e.target)}
+                  </Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -157,7 +225,7 @@ export default function DayView({
                           style={{ backgroundColor: `${e.color || '#00FFFF'}20` }}
                         >
                           <Text style={{ color: e.color || '#00FFFF' }} className="text-[9px] font-bold">
-                            {e.target === 'you' ? i18n.t('forYou') : e.target === 'partner' ? i18n.t('forPartner') : i18n.t('forBoth')}
+                            {getTargetBadgeLabel(e.target)}
                           </Text>
                         </View>
                       </TouchableOpacity>

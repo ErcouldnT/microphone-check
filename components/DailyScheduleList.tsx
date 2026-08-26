@@ -3,10 +3,16 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
+import { RelationshipCounter, getDaysDifference } from '@/db/counters';
+import { UserRole } from '@/db/settings';
 
 interface DailyScheduleListProps {
   selectedDate: string; // YYYY-MM-DD
   events: CalendarEvent[];
+  counters?: RelationshipCounter[];
+  myRole?: UserRole;
+  myName?: string;
+  partnerName?: string;
   onAddEvent: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
   dailyNote?: string;
@@ -16,6 +22,10 @@ interface DailyScheduleListProps {
 export default function DailyScheduleList({
   selectedDate,
   events,
+  counters = [],
+  myRole = 'male',
+  myName = '',
+  partnerName = '',
   onAddEvent,
   onEditEvent,
   dailyNote,
@@ -30,23 +40,45 @@ export default function DailyScheduleList({
   };
 
   const getTargetBadge = (target: string) => {
-    if (target === 'you') {
+    const partnerRole = myRole === 'male' ? 'female' : 'male';
+    const isMe = (target === myRole) || (target === 'you');
+    const isPartner = (target === partnerRole) || (target === 'partner');
+
+    if (target === 'both') {
+      return (
+        <View className="bg-yellow-950/80 border border-yellow-400/40 px-2 py-0.5 rounded-md flex-row items-center">
+          <Text className="text-[10px] text-yellow-400 font-bold">✨ {i18n.t('forBoth')}</Text>
+        </View>
+      );
+    }
+
+    if (target === 'male' || (isMe && myRole === 'male') || (isPartner && myRole === 'female')) {
+      const label = myRole === 'male'
+        ? (myName ? `${myName} (Sen)` : `👤 ${i18n.t('forYou')} (👨)`)
+        : (partnerName ? `${partnerName} (Partnerin)` : `💖 ${i18n.t('forPartner')} (👨)`);
+
       return (
         <View className="bg-cyan-950/80 border border-neonCyan/40 px-2 py-0.5 rounded-md flex-row items-center">
-          <Text className="text-[10px] text-neonCyan font-bold">👤 {i18n.t('forYou')}</Text>
+          <Text className="text-[10px] text-neonCyan font-bold">{label}</Text>
         </View>
       );
     }
-    if (target === 'partner') {
+
+    if (target === 'female' || (isMe && myRole === 'female') || (isPartner && myRole === 'male')) {
+      const label = myRole === 'female'
+        ? (myName ? `${myName} (Sen)` : `👤 ${i18n.t('forYou')} (👩)`)
+        : (partnerName ? `${partnerName} (Partnerin)` : `💖 ${i18n.t('forPartner')} (👩)`);
+
       return (
         <View className="bg-pink-950/80 border border-neonPink/40 px-2 py-0.5 rounded-md flex-row items-center">
-          <Text className="text-[10px] text-neonPink font-bold">💖 {i18n.t('forPartner')}</Text>
+          <Text className="text-[10px] text-neonPink font-bold">{label}</Text>
         </View>
       );
     }
+
     return (
-      <View className="bg-yellow-950/80 border border-yellow-400/40 px-2 py-0.5 rounded-md flex-row items-center">
-        <Text className="text-[10px] text-yellow-400 font-bold">✨ {i18n.t('forBoth')}</Text>
+      <View className="bg-cyan-950/80 border border-neonCyan/40 px-2 py-0.5 rounded-md flex-row items-center">
+        <Text className="text-[10px] text-neonCyan font-bold">👤 {target}</Text>
       </View>
     );
   };
@@ -73,6 +105,38 @@ export default function DailyScheduleList({
         </TouchableOpacity>
       </View>
 
+      {/* Milestone Counters on this day (Automatic injection) */}
+      {counters.length > 0 && (
+        <View className="mb-3 space-y-2">
+          {counters.map(c => {
+            const diff = getDaysDifference(c.targetDate, c.type);
+            const isUntil = c.type === 'until';
+
+            return (
+              <View
+                key={c.id}
+                className="bg-pink-950/40 border border-neonPink/60 p-3 rounded-2xl flex-row items-center justify-between mb-2"
+              >
+                <View className="flex-row items-center flex-1 mr-2">
+                  <Text className="text-xl mr-2.5">{c.icon || '❤️'}</Text>
+                  <View className="flex-1">
+                    <Text className="text-neonPink font-extrabold text-xs">{c.title}</Text>
+                    <Text className="text-gray-400 text-[10px] mt-0.5">
+                      {isUntil
+                        ? (diff === 0 ? i18n.t('todayIsTheDay') : `${Math.abs(diff)} ${i18n.t('daysLeft')}`)
+                        : (diff === 0 ? i18n.t('todayIsTheDay') : `${Math.abs(diff)} ${i18n.t('daysAgo')}`)}
+                    </Text>
+                  </View>
+                </View>
+                <View className="bg-pink-950 border border-neonPink px-2 py-0.5 rounded-full">
+                  <Text className="text-neonPink text-[10px] font-bold">{i18n.t('milestone')}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
       {/* Daily Note Preview (if exists) */}
       {dailyNote ? (
         <TouchableOpacity
@@ -90,7 +154,7 @@ export default function DailyScheduleList({
       ) : null}
 
       {/* Events List */}
-      {events.length === 0 ? (
+      {events.length === 0 && counters.length === 0 ? (
         <View className="py-6 items-center justify-center">
           <FontAwesome name="calendar-o" size={28} color="#444" style={{ marginBottom: 8 }} />
           <Text className="text-gray-500 text-sm font-medium text-center mb-3">

@@ -35,3 +35,33 @@ export const removeSetting = async (key: string): Promise<void> => {
     console.error(`Error removing setting ${key}:`, e);
   }
 };
+
+export type UserRole = 'male' | 'female';
+
+export const getMyRole = async (): Promise<UserRole> => {
+  const role = await getSetting('my_role');
+  if (role === 'female') return 'female';
+  return 'male'; // Default
+};
+
+export const setMyRole = async (role: UserRole): Promise<void> => {
+  await setSetting('my_role', role);
+};
+
+export const getMyName = async (): Promise<string> => {
+  const name = await getSetting('my_name');
+  return name || '';
+};
+
+export const setMyName = async (name: string): Promise<void> => {
+  await setSetting('my_name', name);
+};
+
+export const getPartnerName = async (): Promise<string> => {
+  const name = await getSetting('partner_name');
+  return name || '';
+};
+
+export const setPartnerName = async (name: string): Promise<void> => {
+  await setSetting('partner_name', name);
+};

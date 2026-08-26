@@ -3,6 +3,9 @@ import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
+import { RelationshipCounter, getCountersForDate } from '@/db/counters';
+import { UserRole } from '@/db/settings';
+import { getLocalDateString } from '@/utils/date';
 
 interface WeekViewProps {
   currentDate: Date;
@@ -10,7 +13,11 @@ interface WeekViewProps {
   selectedDate: string; // YYYY-MM-DD
   onSelectDate: (dateStr: string) => void;
   events: CalendarEvent[];
+  counters?: RelationshipCounter[];
   sessionMap: Record<string, number>;
+  myRole?: UserRole;
+  myName?: string;
+  partnerName?: string;
   onAddEvent: (dateStr: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
 }
@@ -21,7 +28,11 @@ export default function WeekView({
   selectedDate,
   onSelectDate,
   events,
+  counters = [],
   sessionMap,
+  myRole = 'male',
+  myName = '',
+  partnerName = '',
   onAddEvent,
   onEditEvent,
 }: WeekViewProps) {
@@ -38,7 +49,7 @@ export default function WeekView({
     for (let i = 0; i < 7; i++) {
       const day = new Date(monday);
       day.setDate(monday.getDate() + i);
-      const str = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+      const str = getLocalDateString(day);
       week.push({ date: day, dateStr: str });
     }
     return week;
@@ -46,6 +57,7 @@ export default function WeekView({
 
   const weekDays = getDaysOfWeek(currentDate);
   const daysShort = i18n.t('daysShort') as unknown as string[];
+  const todayStr = getLocalDateString(new Date());
 
   const handlePrevWeek = () => {
     const prev = new Date(currentDate);
@@ -59,6 +71,20 @@ export default function WeekView({
     onDateChange(next);
   };
 
+  const handleToday = () => {
+    onDateChange(new Date());
+    onSelectDate(todayStr);
+  };
+
+  const getTargetBadgeLabel = (target: string) => {
+    if (target === 'both') return i18n.t('forBoth');
+    if (target === 'male') return myRole === 'male' ? (myName || `${i18n.t('forYou')} 👨`) : (partnerName || `${i18n.t('forPartner')} 👨`);
+    if (target === 'female') return myRole === 'female' ? (myName || `${i18n.t('forYou')} 👩`) : (partnerName || `${i18n.t('forPartner')} 👩`);
+    if (target === 'you') return i18n.t('forYou');
+    if (target === 'partner') return i18n.t('forPartner');
+    return target;
+  };
+
   return (
     <View className="flex-1">
       {/* Week Header Navigator */}
@@ -67,10 +93,13 @@ export default function WeekView({
           <FontAwesome name="chevron-left" size={20} color="#00FFFF" />
         </TouchableOpacity>
 
-        <Text className="text-white font-extrabold text-lg">
-          {weekDays[0].date.getDate()} {i18n.t(`months.${weekDays[0].date.getMonth()}`)} -{' '}
-          {weekDays[6].date.getDate()} {i18n.t(`months.${weekDays[6].date.getMonth()}`)}
-        </Text>
+        <TouchableOpacity onPress={handleToday} className="items-center">
+          <Text className="text-white font-extrabold text-lg">
+            {weekDays[0].date.getDate()} {i18n.t(`months.${weekDays[0].date.getMonth()}`)} -{' '}
+            {weekDays[6].date.getDate()} {i18n.t(`months.${weekDays[6].date.getMonth()}`)}
+          </Text>
+          <Text className="text-neonCyan text-[11px] font-bold mt-0.5">{i18n.t('today')}</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity onPress={handleNextWeek} className="p-2">
           <FontAwesome name="chevron-right" size={20} color="#00FFFF" />
@@ -81,8 +110,9 @@ export default function WeekView({
       <ScrollView showsVerticalScrollIndicator={false} className="space-y-3 pb-8">
         {weekDays.map((item, idx) => {
           const isSelected = item.dateStr === selectedDate;
-          const isToday = new Date().toDateString() === item.date.toDateString();
+          const isToday = item.dateStr === todayStr;
           const dayEvents = events.filter(e => e.startDate <= item.dateStr && e.endDate >= item.dateStr);
+          const dayCounters = getCountersForDate(counters, item.dateStr);
           const micCount = sessionMap[item.dateStr] || 0;
 
           return (
@@ -144,8 +174,26 @@ export default function WeekView({
                 </View>
               </TouchableOpacity>
 
+              {/* Day Milestones */}
+              {dayCounters.length > 0 && (
+                <View className="mt-2 space-y-1">
+                  {dayCounters.map(c => (
+                    <View
+                      key={c.id}
+                      className="bg-pink-950/40 border border-neonPink/60 p-2 rounded-xl flex-row items-center justify-between mb-1"
+                    >
+                      <View className="flex-row items-center">
+                        <Text className="text-base mr-2">{c.icon || '❤️'}</Text>
+                        <Text className="text-neonPink font-bold text-xs">{c.title}</Text>
+                      </View>
+                      <Text className="text-gray-400 text-[9px] font-bold">{i18n.t('milestone')}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               {/* Day Events */}
-              {dayEvents.length === 0 ? (
+              {dayEvents.length === 0 && dayCounters.length === 0 ? (
                 <Text className="text-gray-600 text-xs italic mt-2.5 ml-1">
                   {i18n.t('noEventsForDay')}
                 </Text>
@@ -173,7 +221,7 @@ export default function WeekView({
                         style={{ backgroundColor: `${e.color || '#00FFFF'}20` }}
                       >
                         <Text style={{ color: e.color || '#00FFFF' }} className="text-[9px] font-bold">
-                          {e.target === 'you' ? i18n.t('forYou') : e.target === 'partner' ? i18n.t('forPartner') : i18n.t('forBoth')}
+                          {getTargetBadgeLabel(e.target)}
                         </Text>
                       </View>
                     </TouchableOpacity>
