@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
-const REQUIRED_API_KEY = process.env.API_KEY || 'mc_sec_2026_couple_prod';
+const REQUIRED_API_KEY = process.env.API_KEY || 'Erkut-API-Key';
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
   // Allow healthcheck root endpoint

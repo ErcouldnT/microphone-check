@@ -68,7 +68,7 @@ export const setPartnerName = async (name: string): Promise<void> => {
 
 export const getApiKey = async (): Promise<string> => {
   const key = await getSetting('api_key');
-  return key || process.env.EXPO_PUBLIC_API_KEY || 'mc_sec_2026_couple_prod';
+  return key || process.env.EXPO_PUBLIC_API_KEY || 'Erkut-API-Key';
 };
 
 export const setApiKey = async (apiKey: string): Promise<void> => {
