@@ -222,7 +222,6 @@ app.post('/api/rooms/:code/register-push-token', (req: Request, res: Response) =
   }
 });
 
-// 6. Test Push Notification Dispatcher
 app.post('/api/test-push', async (req: Request, res: Response) => {
   try {
     const { title, body, roomCode } = req.body || {};
@@ -238,13 +237,58 @@ app.post('/api/test-push', async (req: Request, res: Response) => {
       return res.json({ success: false, message: 'No push tokens registered yet on server', tokensCount: 0 });
     }
 
-    await sendExpoPushNotifications(tokens, {
+    const messages = tokens.map(to => ({
+      to,
+      sound: 'default',
       title: title || '🔔 Test Bildirimi',
       body: body || 'Microphone Check bildirim sistemi başarıyla çalışıyor! 🎉',
-      data: { test: true }
+      data: { test: true },
+      priority: 'high',
+      badge: 1,
+      channelId: 'default',
+    }));
+
+    const expoRes = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messages),
     });
 
-    res.json({ success: true, message: `Notification sent to ${tokens.length} devices`, tokensCount: tokens.length });
+    const expoResult = await expoRes.json();
+
+    const ticketIds: string[] = [];
+    if (Array.isArray(expoResult.data)) {
+      for (const item of expoResult.data) {
+        if (item.id) ticketIds.push(item.id);
+      }
+    }
+
+    let receiptData = null;
+    if (ticketIds.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const receiptRes = await fetch('https://exp.host/--/api/v2/push/getReceipts', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids: ticketIds }),
+      });
+      receiptData = await receiptRes.json();
+    }
+
+    res.json({
+      success: true,
+      message: `Notification sent to ${tokens.length} devices`,
+      tokensCount: tokens.length,
+      tokens,
+      expoResult,
+      receiptData
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
