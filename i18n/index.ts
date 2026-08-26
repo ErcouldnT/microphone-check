@@ -53,6 +53,58 @@ const translations = {
         noteDeleted: "Not silindi.",
         microphoneCount: "Mikrofon Sayısı",
         hasNote: "Plan/Not",
+        // Views
+        monthView: "Aylık",
+        weekView: "Haftalık",
+        dayView: "Günlük",
+        // Assignees
+        all: "Tümü",
+        forYou: "Sen",
+        forPartner: "Partnerin",
+        forBoth: "İkimiz",
+        // Event Modal
+        newEvent: "Yeni Etkinlik / Plan",
+        editEvent: "Etkinliği Düzenle",
+        eventTitle: "Başlık",
+        titlePlaceholder: "Örn: Akşam Yemeği, Kamp, Konser...",
+        startDate: "Başlangıç Tarihi",
+        endDate: "Bitiş Tarihi",
+        allDay: "Tüm Gün",
+        startTime: "Başlangıç Saati",
+        endTime: "Bitiş Saati",
+        color: "Renk",
+        assignTo: "Kime Ait?",
+        description: "Açıklama / Not",
+        descPlaceholder: "Konum, detaylar veya not ekle...",
+        deleteEvent: "Etkinliği Sil",
+        deleteEventConfirm: "Bu etkinliği silmek istediğinize emin misiniz?",
+        saveEvent: "Kaydet",
+        eventSaved: "Etkinlik kaydedildi!",
+        eventDeleted: "Etkinlik silindi.",
+        // Daily Schedule List
+        scheduleForDay: "Günün Programı",
+        noEventsForDay: "Bugün için planlanmış bir etkinlik yok.",
+        addEvent: "Etkinlik Ekle",
+        // Relationship Counters
+        counters: "Sayaçlar",
+        relationshipMilestones: "İlişki & Buluşma Sayaçları",
+        daysSinceFirstMeet: "İlk Tanışma",
+        daysTogether: "Birlikte Geçen Gün",
+        daysUntilNextMeet: "Kavuşmaya Kalan Gün",
+        addCounter: "Yeni Sayaç Ekle",
+        counterTitle: "Sayaç Başlığı",
+        counterType: "Sayaç Türü",
+        since: "Geçen Süre (Den Beri)",
+        until: "Kalan Süre (Kala)",
+        targetDate: "Hedef Tarih",
+        daysAgo: "gün önce",
+        daysLeft: "gün kaldı",
+        todayIsTheDay: "Bugün o gün! 🎉",
+        deleteCounter: "Sayacı Sil",
+        // Notifications
+        scheduleUpdated: "Takvim Güncellendi",
+        newPlanAdded: "Yeni bir plan eklendi.",
+        eventRemoved: "Bir etkinlik kaldırıldı.",
         months: {
             0: "Ocak", 1: "Şubat", 2: "Mart", 3: "Nisan", 4: "Mayıs", 5: "Haziran",
             6: "Temmuz", 7: "Ağustos", 8: "Eylül", 9: "Ekim", 10: "Kasım", 11: "Aralık"
@@ -110,6 +162,58 @@ const translations = {
         noteDeleted: "Note deleted.",
         microphoneCount: "Microphone Count",
         hasNote: "Plan/Note",
+        // Views
+        monthView: "Month",
+        weekView: "Week",
+        dayView: "Day",
+        // Assignees
+        all: "All",
+        forYou: "You",
+        forPartner: "Partner",
+        forBoth: "Both of Us",
+        // Event Modal
+        newEvent: "New Event / Plan",
+        editEvent: "Edit Event",
+        eventTitle: "Title",
+        titlePlaceholder: "e.g. Dinner date, Camping trip, Concert...",
+        startDate: "Start Date",
+        endDate: "End Date",
+        allDay: "All Day",
+        startTime: "Start Time",
+        endTime: "End Time",
+        color: "Color",
+        assignTo: "Assignee",
+        description: "Description / Notes",
+        descPlaceholder: "Location, details or notes...",
+        deleteEvent: "Delete Event",
+        deleteEventConfirm: "Are you sure you want to delete this event?",
+        saveEvent: "Save",
+        eventSaved: "Event saved!",
+        eventDeleted: "Event deleted.",
+        // Daily Schedule List
+        scheduleForDay: "Schedule for Today",
+        noEventsForDay: "No events planned for this day.",
+        addEvent: "Add Event",
+        // Relationship Counters
+        counters: "Counters",
+        relationshipMilestones: "Milestones & Counters",
+        daysSinceFirstMeet: "First Meet",
+        daysTogether: "Days Together",
+        daysUntilNextMeet: "Days Until Next Meet",
+        addCounter: "Add New Counter",
+        counterTitle: "Counter Title",
+        counterType: "Counter Type",
+        since: "Time Since (Past Date)",
+        until: "Time Left (Future Date)",
+        targetDate: "Target Date",
+        daysAgo: "days ago",
+        daysLeft: "days left",
+        todayIsTheDay: "Today is the day! 🎉",
+        deleteCounter: "Delete Counter",
+        // Notifications
+        scheduleUpdated: "Schedule Updated",
+        newPlanAdded: "A new plan was added.",
+        eventRemoved: "An event was removed.",
         months: {
             0: "January", 1: "February", 2: "March", 3: "April", 4: "May", 5: "June",
             6: "July", 7: "August", 8: "September", 9: "October", 10: "November", 11: "December"
@@ -119,7 +223,7 @@ const translations = {
     ru: {
         calendar: "Календарь",
         stats: "Статистика",
-        totalDays: "Всеgo дней",
+        totalDays: "Всего дней",
         totalMicrophones: "Всего микрофонов",
         maxDaily: "Рекорд за день",
         topMonth: "Лучший месяц",
@@ -167,6 +271,58 @@ const translations = {
         noteDeleted: "Заметка удалена.",
         microphoneCount: "Количество микрофонов",
         hasNote: "План/Заметка",
+        // Views
+        monthView: "Месяц",
+        weekView: "Неделя",
+        dayView: "День",
+        // Assignees
+        all: "Все",
+        forYou: "Ты",
+        forPartner: "Партнер",
+        forBoth: "Мы вместе",
+        // Event Modal
+        newEvent: "Новое событие / План",
+        editEvent: "Редактировать событие",
+        eventTitle: "Название",
+        titlePlaceholder: "Напр: Ужин, Поход, Концерт...",
+        startDate: "Дата начала",
+        endDate: "Дата окончания",
+        allDay: "Весь день",
+        startTime: "Время начала",
+        endTime: "Время окончания",
+        color: "Цвет",
+        assignTo: "Для кого",
+        description: "Описание / Заметки",
+        descPlaceholder: "Место, детали или заметки...",
+        deleteEvent: "Удалить событие",
+        deleteEventConfirm: "Вы уверены, что хотите удалить это событие?",
+        saveEvent: "Сохранить",
+        eventSaved: "Событие сохранено!",
+        eventDeleted: "Событие удалено.",
+        // Daily Schedule List
+        scheduleForDay: "План на день",
+        noEventsForDay: "На этот день событий нет.",
+        addEvent: "Добавить событие",
+        // Relationship Counters
+        counters: "Счетчики",
+        relationshipMilestones: "Важные даты и счетчики",
+        daysSinceFirstMeet: "Первая встреча",
+        daysTogether: "Дней вместе",
+        daysUntilNextMeet: "Дней до встречи",
+        addCounter: "Добавить счетчик",
+        counterTitle: "Название",
+        counterType: "Тип",
+        since: "Прошло времени (С даты)",
+        until: "Осталось времени (До даты)",
+        targetDate: "Целевая дата",
+        daysAgo: "дней назад",
+        daysLeft: "дней осталось",
+        todayIsTheDay: "Сегодня тот самый день! 🎉",
+        deleteCounter: "Удалить счетчик",
+        // Notifications
+        scheduleUpdated: "Расписание обновлено",
+        newPlanAdded: "Добавлено новое событие.",
+        eventRemoved: "Событие удалено.",
         months: {
             0: "Январь", 1: "Февраль", 2: "Март", 3: "Апрель", 4: "Май", 5: "Июнь",
             6: "Июль", 7: "Август", 8: "Сентябрь", 9: "Октябрь", 10: "Ноябрь", 11: "Декабрь"
@@ -177,10 +333,7 @@ const translations = {
 
 const i18n = new I18n(translations);
 
-// Set the locale once at the beginning of your app.
 i18n.locale = Localization.getLocales()[0].languageCode ?? 'tr';
-
-// When a translation isn't found in the current locale, fallback to the default locale
 i18n.enableFallback = true;
 i18n.defaultLocale = 'tr';
 

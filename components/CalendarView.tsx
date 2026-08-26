@@ -1,408 +1,607 @@
-import { db } from '@/db/client';
-import { sessions } from '@/db/schema';
-import i18n from '@/i18n';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { eq } from 'drizzle-orm';
 import { useFocusEffect } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
+import i18n from '@/i18n';
+import { db } from '@/db/client';
+import { sessions } from '@/db/schema';
+import { getAllNotes, setNoteByDate, deleteNoteByDate } from '@/db/notes';
+import { CalendarEvent, getAllEvents, saveEvent, deleteEvent } from '@/db/events';
+import { syncService, ConnectionStatus } from '@/services/syncService';
+
 import PairingModal from './PairingModal';
 import DayNoteModal from './DayNoteModal';
-import { syncService, ConnectionStatus } from '@/services/syncService';
-import { getAllNotes, setNoteByDate, deleteNoteByDate } from '@/db/notes';
+import EventModal from './EventModal';
+import DailyScheduleList from './DailyScheduleList';
+import RelationshipCounterCard from './RelationshipCounterCard';
+import WeekView from './WeekView';
+import DayView from './DayView';
+import InAppNotificationToast from './InAppNotificationToast';
 
-// Use i18n for days
 const getDaysShort = () => i18n.t('daysShort') as unknown as string[];
 
 export default function CalendarView() {
-    const [currentDate, setCurrentDate] = useState(new Date());
-    const [sessionMap, setSessionMap] = useState<Record<string, number>>({});
-    const [noteMap, setNoteMap] = useState<Record<string, string>>({});
-    const [pairingModalVisible, setPairingModalVisible] = useState(false);
-    const [dayModalVisible, setDayModalVisible] = useState(false);
-    const [selectedDate, setSelectedDate] = useState<string>('');
-    const [syncStatus, setSyncStatus] = useState<ConnectionStatus>('local');
-    const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
+  const [filterTarget, setFilterTarget] = useState<'all' | 'you' | 'partner' | 'both'>('all');
 
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
+  const [sessionMap, setSessionMap] = useState<Record<string, number>>({});
+  const [noteMap, setNoteMap] = useState<Record<string, string>>({});
+  const [eventsList, setEventsList] = useState<CalendarEvent[]>([]);
 
-    const [monthStats, setMonthStats] = useState({ days: 0, count: 0 });
+  // Modals
+  const [pairingModalVisible, setPairingModalVisible] = useState(false);
+  const [dayNoteModalVisible, setDayNoteModalVisible] = useState(false);
+  const [eventModalVisible, setEventModalVisible] = useState(false);
+  const [selectedEventToEdit, setSelectedEventToEdit] = useState<CalendarEvent | null>(null);
 
-    const loadData = async () => {
-        try {
-            // Load sessions
-            const allSessions = await db.select().from(sessions);
-            const map: Record<string, number> = {};
-            allSessions.forEach(s => {
-                map[s.date] = (map[s.date] || 0) + s.count;
-            });
-            setSessionMap(map);
-            calculateMonthStats(map, year, month);
+  // Sync state
+  const [syncStatus, setSyncStatus] = useState<ConnectionStatus>('local');
+  const [roomCode, setRoomCode] = useState<string | null>(null);
 
-            // Load notes
-            const allNotes = await getAllNotes();
-            const nMap: Record<string, string> = {};
-            allNotes.forEach(n => {
-                if (n.content?.trim()) {
-                    nMap[n.date] = n.content.trim();
-                }
-            });
-            setNoteMap(nMap);
-        } catch (e) {
-            console.error(e);
-        }
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const [monthStats, setMonthStats] = useState({ days: 0, count: 0 });
+
+  const loadData = async () => {
+    try {
+      // 1. Sessions
+      const allSessions = await db.select().from(sessions);
+      const sMap: Record<string, number> = {};
+      allSessions.forEach(s => {
+        sMap[s.date] = (sMap[s.date] || 0) + s.count;
+      });
+      setSessionMap(sMap);
+      calculateMonthStats(sMap, year, month);
+
+      // 2. Notes
+      const allNotes = await getAllNotes();
+      const nMap: Record<string, string> = {};
+      allNotes.forEach(n => {
+        if (n.content?.trim()) nMap[n.date] = n.content.trim();
+      });
+      setNoteMap(nMap);
+
+      // 3. Events
+      const allEv = await getAllEvents();
+      setEventsList(allEv);
+    } catch (e) {
+      console.error('Error loading calendar data:', e);
+    }
+  };
+
+  const calculateMonthStats = (map: Record<string, number>, y: number, m: number) => {
+    let days = 0;
+    let count = 0;
+    const prefix = `${y}-${String(m + 1).padStart(2, '0')}`;
+    Object.keys(map).forEach(date => {
+      if (date.startsWith(prefix) && map[date] > 0) {
+        days++;
+        count += map[date];
+      }
+    });
+    setMonthStats({ days, count });
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+      setSyncStatus(syncService.getStatus());
+      setRoomCode(syncService.getRoomCode());
+    }, [])
+  );
+
+  useEffect(() => {
+    const unsubSession = syncService.addSessionListener(({ date, count }) => {
+      setSessionMap(prev => {
+        const next = { ...prev };
+        if (count <= 0) delete next[date];
+        else next[date] = count;
+        calculateMonthStats(next, year, month);
+        return next;
+      });
+    });
+
+    const unsubNote = syncService.addNoteListener(({ date, content }) => {
+      setNoteMap(prev => {
+        const next = { ...prev };
+        if (!content || !content.trim()) delete next[date];
+        else next[date] = content.trim();
+        return next;
+      });
+    });
+
+    const unsubEvent = syncService.addEventListener(() => {
+      loadData();
+    });
+
+    const unsubSync = syncService.addSyncListener(() => {
+      loadData();
+      setRoomCode(syncService.getRoomCode());
+    });
+
+    const unsubStatus = syncService.addStatusListener((newStatus) => {
+      setSyncStatus(newStatus);
+      setRoomCode(syncService.getRoomCode());
+    });
+
+    return () => {
+      unsubSession();
+      unsubNote();
+      unsubEvent();
+      unsubSync();
+      unsubStatus();
     };
+  }, [year, month]);
 
-    const calculateMonthStats = (map: Record<string, number>, y: number, m: number) => {
-        let days = 0;
-        let count = 0;
-        const prefix = `${y}-${String(m + 1).padStart(2, '0')}`;
+  // Calendar calculations
+  const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+  const getFirstDayOfMonth = (y: number, m: number) => {
+    const day = new Date(y, m, 1).getDay(); // 0(Sun) - 6(Sat)
+    return day === 0 ? 6 : day - 1; // Monday start
+  };
 
-        Object.keys(map).forEach(date => {
-            if (date.startsWith(prefix)) {
-                if (map[date] > 0) {
-                    days++;
-                    count += map[date];
-                }
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstDay = getFirstDayOfMonth(year, month);
+
+  const handlePrevMonth = () => {
+    const newDate = new Date(year, month - 1, 1);
+    setCurrentDate(newDate);
+    calculateMonthStats(sessionMap, newDate.getFullYear(), newDate.getMonth());
+  };
+
+  const handleNextMonth = () => {
+    const newDate = new Date(year, month + 1, 1);
+    setCurrentDate(newDate);
+    calculateMonthStats(sessionMap, newDate.getFullYear(), newDate.getMonth());
+  };
+
+  // Session update helper
+  const updateSession = async (dayString: string, change: number) => {
+    try {
+      const existing = await db.select().from(sessions).where(eq(sessions.date, dayString));
+      let newCount = 0;
+
+      if (existing.length > 0) {
+        const currentTotal = existing.reduce((acc, curr) => acc + curr.count, 0);
+        newCount = currentTotal + change;
+
+        if (newCount <= 0) {
+          newCount = 0;
+          await db.delete(sessions).where(eq(sessions.date, dayString));
+        } else {
+          const firstId = existing[0].id;
+          await db.update(sessions).set({ count: newCount }).where(eq(sessions.id, firstId));
+          if (existing.length > 1) {
+            for (let i = 1; i < existing.length; i++) {
+              await db.delete(sessions).where(eq(sessions.id, existing[i].id));
             }
-        });
-        setMonthStats({ days, count });
-    };
-
-    useFocusEffect(
-        useCallback(() => {
-            loadData();
-            setSyncStatus(syncService.getStatus());
-            setRoomCode(syncService.getRoomCode());
-        }, [])
-    );
-
-    useEffect(() => {
-        // Listen for remote real-time session updates
-        const unsubSession = syncService.addSessionListener(({ date, count }) => {
-            setSessionMap(prev => {
-                const next = { ...prev };
-                if (count <= 0) {
-                    delete next[date];
-                } else {
-                    next[date] = count;
-                }
-                calculateMonthStats(next, year, month);
-                return next;
-            });
-        });
-
-        // Listen for remote real-time note updates
-        const unsubNote = syncService.addNoteListener(({ date, content }) => {
-            setNoteMap(prev => {
-                const next = { ...prev };
-                if (!content || !content.trim()) {
-                    delete next[date];
-                } else {
-                    next[date] = content.trim();
-                }
-                return next;
-            });
-        });
-
-        // Listen for full sync events
-        const unsubSync = syncService.addSyncListener(() => {
-            loadData();
-            setRoomCode(syncService.getRoomCode());
-        });
-
-        // Listen for status changes
-        const unsubStatus = syncService.addStatusListener((newStatus) => {
-            setSyncStatus(newStatus);
-            setRoomCode(syncService.getRoomCode());
-        });
-
-        return () => {
-            unsubSession();
-            unsubNote();
-            unsubSync();
-            unsubStatus();
-        };
-    }, [year, month]);
-
-    const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
-    const getFirstDayOfMonth = (y: number, m: number) => {
-        const day = new Date(y, m, 1).getDay(); // 0(Sun) - 6(Sat)
-        return day === 0 ? 6 : day - 1; // 0(Mon) - 6(Sun)
-    };
-
-    const daysInMonth = getDaysInMonth(year, month);
-    const firstDay = getFirstDayOfMonth(year, month);
-
-    const handlePrevMonth = () => {
-        const newDate = new Date(year, month - 1, 1);
-        setCurrentDate(newDate);
-        calculateMonthStats(sessionMap, newDate.getFullYear(), newDate.getMonth());
-    };
-    const handleNextMonth = () => {
-        const newDate = new Date(year, month + 1, 1);
-        setCurrentDate(newDate);
-        calculateMonthStats(sessionMap, newDate.getFullYear(), newDate.getMonth());
-    };
-
-    // Helper to handle updates
-    const updateSession = async (dayString: string, change: number) => {
-        try {
-            const existing = await db.select().from(sessions).where(eq(sessions.date, dayString));
-            let newCount = 0;
-
-            if (existing.length > 0) {
-                const currentTotal = existing.reduce((acc, curr) => acc + curr.count, 0);
-                newCount = currentTotal + change;
-
-                if (newCount <= 0) {
-                    newCount = 0;
-                    await db.delete(sessions).where(eq(sessions.date, dayString));
-                } else {
-                    const firstId = existing[0].id;
-                    await db.update(sessions)
-                        .set({ count: newCount })
-                        .where(eq(sessions.id, firstId));
-
-                    if (existing.length > 1) {
-                        const itemsToDelete = existing.slice(1).map(x => x.id);
-                        for (const id of itemsToDelete) {
-                            await db.delete(sessions).where(eq(sessions.id, id));
-                        }
-                    }
-                }
-            } else {
-                if (change > 0) {
-                    newCount = change;
-                    await db.insert(sessions).values({
-                        date: dayString,
-                        count: change
-                    });
-                }
-            }
-
-            // Optimistic UI update
-            setSessionMap(prev => {
-                const next = { ...prev };
-                if (newCount <= 0) {
-                    delete next[dayString];
-                } else {
-                    next[dayString] = newCount;
-                }
-                calculateMonthStats(next, year, month);
-                return next;
-            });
-
-            // Send real-time update via WebSocket to server
-            syncService.sendSessionUpdate(dayString, newCount);
-        } catch (e) {
-            console.error(e);
+          }
         }
-    };
-
-    const handleIncrement = (dayString: string) => updateSession(dayString, 1);
-    const handleDecrement = (dayString: string) => updateSession(dayString, -1);
-
-    const handleOpenDayModal = (dayString: string) => {
-        setSelectedDate(dayString);
-        setDayModalVisible(true);
-    };
-
-    const handleSaveDayModal = async (dateStr: string, newCount: number, noteContent: string) => {
-        try {
-            // 1. Update session count if changed
-            const oldCount = sessionMap[dateStr] || 0;
-            if (newCount !== oldCount) {
-                const diff = newCount - oldCount;
-                await updateSession(dateStr, diff);
-            }
-
-            // 2. Update note
-            const trimmed = noteContent.trim();
-            await setNoteByDate(dateStr, trimmed);
-
-            setNoteMap(prev => {
-                const next = { ...prev };
-                if (!trimmed) {
-                    delete next[dateStr];
-                } else {
-                    next[dateStr] = trimmed;
-                }
-                return next;
-            });
-
-            // Send note update over WebSocket
-            syncService.sendNoteUpdate(dateStr, trimmed);
-        } catch (e) {
-            console.error('Error saving day modal:', e);
+      } else {
+        if (change > 0) {
+          newCount = change;
+          await db.insert(sessions).values({ date: dayString, count: change });
         }
-    };
+      }
 
-    const handleDeleteNote = async (dateStr: string) => {
-        try {
-            await deleteNoteByDate(dateStr);
-            setNoteMap(prev => {
-                const next = { ...prev };
-                delete next[dateStr];
-                return next;
-            });
-            syncService.sendNoteUpdate(dateStr, '');
-        } catch (e) {
-            console.error('Error deleting note:', e);
-        }
-    };
+      setSessionMap(prev => {
+        const next = { ...prev };
+        if (newCount <= 0) delete next[dayString];
+        else next[dayString] = newCount;
+        calculateMonthStats(next, year, month);
+        return next;
+      });
 
-    const renderDays = () => {
-        const days = [];
-        // blanks
-        for (let i = 0; i < firstDay; i++) {
-            days.push(<View key={`blank-${i}`} className="w-[14.2%] h-14" />);
-        }
+      syncService.sendSessionUpdate(dayString, newCount);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
-        for (let d = 1; d <= daysInMonth; d++) {
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-            const count = sessionMap[dateStr] || 0;
-            const hasNote = Boolean(noteMap[dateStr]);
-            const isToday = new Date().toDateString() === new Date(year, month, d).toDateString();
+  // Event handlers
+  const handleOpenAddEvent = (dateStr: string, time?: string) => {
+    setSelectedDate(dateStr);
+    setSelectedEventToEdit(null);
+    setEventModalVisible(true);
+  };
 
-            days.push(
-                <TouchableOpacity
-                    key={d}
-                    onPress={() => handleIncrement(dateStr)}
-                    onLongPress={() => handleOpenDayModal(dateStr)}
-                    delayLongPress={400}
-                    className={`w-[14.2%] h-14 items-center justify-center border-gray-800 border-[0.5px] relative ${
-                        isToday ? 'bg-gray-800' : ''
-                    }`}
-                >
-                    {/* Note indicator badge at top right */}
-                    {hasNote ? (
-                        <TouchableOpacity
-                            onPress={() => handleOpenDayModal(dateStr)}
-                            className="absolute top-1 right-1"
-                        >
-                            <FontAwesome name="pencil" size={9} color="#c084fc" />
-                        </TouchableOpacity>
-                    ) : null}
+  const handleOpenEditEvent = (event: CalendarEvent) => {
+    setSelectedEventToEdit(event);
+    setEventModalVisible(true);
+  };
 
-                    <Text className={`text-lg font-bold ${count > 0 ? 'text-neonPink' : 'text-gray-400'}`}>
-                        {d}
-                    </Text>
+  const handleSaveEvent = async (event: CalendarEvent) => {
+    await saveEvent(event);
+    syncService.sendEventUpdate(event);
+    loadData();
+  };
 
-                    {count > 0 && (
-                        <View className="flex-row items-center mt-0.5">
-                            <FontAwesome name="microphone" size={10} color="#00FFFF" />
-                            <Text className="text-[10px] text-neonCyan ml-1">{count > 9 ? '9+' : count}</Text>
-                        </View>
-                    )}
-                </TouchableOpacity>
-            );
-        }
-        return days;
-    };
+  const handleDeleteEvent = async (eventId: string) => {
+    await deleteEvent(eventId);
+    syncService.sendEventDelete(eventId);
+    loadData();
+  };
 
-    const getStatusIndicator = () => {
-        if (!roomCode) {
-            return (
-                <TouchableOpacity
-                    onPress={() => setPairingModalVisible(true)}
-                    className="flex-row items-center bg-gray-900 border border-gray-800 px-3 py-1 rounded-full"
-                >
-                    <FontAwesome name="users" size={12} color="#00FFFF" style={{ marginRight: 6 }} />
-                    <Text className="text-neonCyan text-xs font-bold">{i18n.t('pairWithFriend')}</Text>
-                </TouchableOpacity>
-            );
-        }
+  // Filter events by target
+  const filteredEvents = eventsList.filter(e => {
+    if (filterTarget === 'all') return true;
+    return e.target === filterTarget;
+  });
 
-        let dotColor = 'bg-gray-400';
-        if (syncStatus === 'connected') dotColor = 'bg-green-400';
-        else if (syncStatus === 'connecting') dotColor = 'bg-yellow-400';
-        else if (syncStatus === 'disconnected') dotColor = 'bg-red-400';
+  const selectedDayEvents = filteredEvents.filter(
+    e => e.startDate <= selectedDate && e.endDate >= selectedDate
+  );
 
-        return (
-            <TouchableOpacity
-                onPress={() => setPairingModalVisible(true)}
-                className="flex-row items-center bg-gray-900 border border-neonCyan/40 px-3 py-1 rounded-full"
+  // Month grid rendering
+  const renderMonthDays = () => {
+    const days = [];
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<View key={`blank-${i}`} className="w-[14.2%] h-[74px] p-0.5" />);
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const count = sessionMap[dateStr] || 0;
+      const hasNote = Boolean(noteMap[dateStr]);
+      const isSelected = dateStr === selectedDate;
+      const isToday = new Date().toDateString() === new Date(year, month, d).toDateString();
+
+      const dayEvents = filteredEvents.filter(
+        e => e.startDate <= dateStr && e.endDate >= dateStr
+      );
+
+      days.push(
+        <TouchableOpacity
+          key={d}
+          activeOpacity={0.8}
+          onPress={() => setSelectedDate(dateStr)}
+          onLongPress={() => {
+            setSelectedDate(dateStr);
+            setDayNoteModalVisible(true);
+          }}
+          delayLongPress={350}
+          className={`w-[14.2%] h-[74px] p-1 border-[0.5px] border-gray-900 justify-between ${
+            isSelected
+              ? 'bg-gray-900 border-neonCyan/80'
+              : isToday
+              ? 'bg-gray-950 border-gray-700'
+              : 'bg-black'
+          }`}
+        >
+          {/* Day Number and Badges Header */}
+          <View className="flex-row justify-between items-center">
+            <Text
+              className={`text-xs font-bold ${
+                isToday ? 'text-neonCyan' : isSelected ? 'text-white' : count > 0 ? 'text-neonPink' : 'text-gray-400'
+              }`}
             >
-                <View className={`w-2 h-2 rounded-full ${dotColor} mr-2`} />
-                <Text className="text-white text-xs font-bold tracking-wider mr-1">{roomCode}</Text>
-                <FontAwesome name="exchange" size={10} color="#00FFFF" />
-            </TouchableOpacity>
-        );
-    };
+              {d}
+            </Text>
+
+            <View className="flex-row items-center">
+              {hasNote && (
+                <View className="w-1.5 h-1.5 rounded-full bg-purple-400 mr-1" />
+              )}
+              {count > 0 && (
+                <View className="flex-row items-center">
+                  <FontAwesome name="microphone" size={8} color="#00FFFF" />
+                  <Text className="text-[9px] text-neonCyan font-bold ml-0.5">
+                    {count > 9 ? '9+' : count}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Event Pills inside Day Cell (TimeTree Style) */}
+          <View className="space-y-0.5 overflow-hidden">
+            {dayEvents.slice(0, 2).map(e => (
+              <View
+                key={e.id}
+                style={{ backgroundColor: e.color || '#00FFFF' }}
+                className="px-1 py-0.5 rounded-[3px] mb-0.5"
+              >
+                <Text
+                  className="text-[8px] font-extrabold text-black"
+                  numberOfLines={1}
+                >
+                  {e.title}
+                </Text>
+              </View>
+            ))}
+
+            {dayEvents.length > 2 && (
+              <Text className="text-[8px] text-gray-500 font-bold">
+                +{dayEvents.length - 2}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+      );
+    }
+    return days;
+  };
+
+  const getStatusIndicator = () => {
+    if (!roomCode) {
+      return (
+        <TouchableOpacity
+          onPress={() => setPairingModalVisible(true)}
+          className="flex-row items-center bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-full"
+        >
+          <FontAwesome name="users" size={12} color="#00FFFF" style={{ marginRight: 6 }} />
+          <Text className="text-neonCyan text-xs font-bold">{i18n.t('pairWithFriend')}</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    let dotColor = 'bg-gray-400';
+    if (syncStatus === 'connected') dotColor = 'bg-green-400';
+    else if (syncStatus === 'connecting') dotColor = 'bg-yellow-400';
+    else if (syncStatus === 'disconnected') dotColor = 'bg-red-400';
 
     return (
-        <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
-            <View className="p-4">
-                {/* Top Bar with Live Room Status */}
-                <View className="flex-row justify-between items-center mb-4">
-                    <Text className="text-white font-extrabold text-lg tracking-wider">
-                        MICROPHONE<Text className="text-neonCyan">CHECK</Text>
-                    </Text>
-                    {getStatusIndicator()}
-                </View>
+      <TouchableOpacity
+        onPress={() => setPairingModalVisible(true)}
+        className="flex-row items-center bg-gray-900 border border-neonCyan/40 px-3 py-1.5 rounded-full"
+      >
+        <View className={`w-2 h-2 rounded-full ${dotColor} mr-2`} />
+        <Text className="text-white text-xs font-bold tracking-wider mr-1">{roomCode}</Text>
+        <FontAwesome name="exchange" size={10} color="#00FFFF" />
+      </TouchableOpacity>
+    );
+  };
 
-                {/* Header */}
-                <View className="flex-row justify-between items-center mb-6">
-                    <TouchableOpacity onPress={handlePrevMonth} className="p-2">
-                        <FontAwesome name="chevron-left" size={24} color="#00FFFF" />
-                    </TouchableOpacity>
-                    <Text className="text-2xl text-white font-bold">
-                        {i18n.t(`months.${currentDate.getMonth()}`)} {currentDate.getFullYear()}
-                    </Text>
-                    <TouchableOpacity onPress={handleNextMonth} className="p-2">
-                        <FontAwesome name="chevron-right" size={24} color="#00FFFF" />
-                    </TouchableOpacity>
-                </View>
+  return (
+    <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
+      <InAppNotificationToast />
 
-                {/* Week Days */}
-                <View className="flex-row mb-2 border-b border-gray-800 pb-2">
-                    {getDaysShort().map((day: string, index: number) => (
-                        <View key={index} className="w-[14.2%] items-center">
-                            <Text className="text-gray-500 font-bold uppercase text-xs">{day}</Text>
-                        </View>
-                    ))}
-                </View>
+      <ScrollView showsVerticalScrollIndicator={false} className="flex-1 p-4">
+        {/* Top Header Bar */}
+        <View className="flex-row justify-between items-center mb-4">
+          <Text className="text-white font-extrabold text-lg tracking-wider">
+            MICROPHONE<Text className="text-neonCyan">CHECK</Text>
+          </Text>
+          {getStatusIndicator()}
+        </View>
 
-                {/* Grid */}
-                <View className="flex-row flex-wrap">
-                    {renderDays()}
-                </View>
+        {/* Milestone & Relationship Counters */}
+        <RelationshipCounterCard />
 
-                {/* Monthly Summary */}
-                <Text className="text-white font-bold mb-4 mt-8 text-xl">
-                    {i18n.t(`months.${currentDate.getMonth()}`)} {i18n.t('summary')}
-                </Text>
-                <View className="flex-row justify-between mb-8">
-                    <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonPink">
-                        <Text className="text-gray-400 text-sm">{i18n.t('visitedDays')}</Text>
-                        <Text className="text-3xl text-neonPink font-bold">{monthStats.days}</Text>
-                    </View>
-                    <View className="bg-gray-900 p-4 rounded-xl w-[48%] border border-neonCyan">
-                        <Text className="text-gray-400 text-sm">{i18n.t('totalMicrophones')}</Text>
-                        <Text className="text-3xl text-neonCyan font-bold">{monthStats.count}</Text>
-                    </View>
-                </View>
+        {/* View Switcher: [ Month | Week | Day ] */}
+        <View className="flex-row bg-gray-900 border border-gray-800 p-1 rounded-2xl mb-4">
+          <TouchableOpacity
+            onPress={() => setViewMode('month')}
+            className={`flex-1 py-2 rounded-xl items-center flex-row justify-center ${
+              viewMode === 'month' ? 'bg-cyan-950 border border-neonCyan' : ''
+            }`}
+          >
+            <FontAwesome
+              name="calendar"
+              size={12}
+              color={viewMode === 'month' ? '#00FFFF' : '#888'}
+              style={{ marginRight: 6 }}
+            />
+            <Text className={`font-extrabold text-xs ${viewMode === 'month' ? 'text-neonCyan' : 'text-gray-400'}`}>
+              {i18n.t('monthView')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setViewMode('week')}
+            className={`flex-1 py-2 rounded-xl items-center flex-row justify-center ${
+              viewMode === 'week' ? 'bg-cyan-950 border border-neonCyan' : ''
+            }`}
+          >
+            <FontAwesome
+              name="columns"
+              size={12}
+              color={viewMode === 'week' ? '#00FFFF' : '#888'}
+              style={{ marginRight: 6 }}
+            />
+            <Text className={`font-extrabold text-xs ${viewMode === 'week' ? 'text-neonCyan' : 'text-gray-400'}`}>
+              {i18n.t('weekView')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setViewMode('day')}
+            className={`flex-1 py-2 rounded-xl items-center flex-row justify-center ${
+              viewMode === 'day' ? 'bg-cyan-950 border border-neonCyan' : ''
+            }`}
+          >
+            <FontAwesome
+              name="clock-o"
+              size={14}
+              color={viewMode === 'day' ? '#00FFFF' : '#888'}
+              style={{ marginRight: 6 }}
+            />
+            <Text className={`font-extrabold text-xs ${viewMode === 'day' ? 'text-neonCyan' : 'text-gray-400'}`}>
+              {i18n.t('dayView')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Member / Assignee Filter Pills (TimeTree style) */}
+        <View className="flex-row mb-4">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+            <TouchableOpacity
+              onPress={() => setFilterTarget('all')}
+              className={`px-3 py-1.5 rounded-full mr-2 border ${
+                filterTarget === 'all' ? 'bg-gray-800 border-white' : 'bg-gray-950 border-gray-800'
+              }`}
+            >
+              <Text className={`text-xs font-bold ${filterTarget === 'all' ? 'text-white' : 'text-gray-400'}`}>
+                {i18n.t('all')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setFilterTarget('you')}
+              className={`px-3 py-1.5 rounded-full mr-2 border ${
+                filterTarget === 'you' ? 'bg-cyan-950 border-neonCyan' : 'bg-gray-950 border-gray-800'
+              }`}
+            >
+              <Text className={`text-xs font-bold ${filterTarget === 'you' ? 'text-neonCyan' : 'text-gray-400'}`}>
+                👤 {i18n.t('forYou')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setFilterTarget('partner')}
+              className={`px-3 py-1.5 rounded-full mr-2 border ${
+                filterTarget === 'partner' ? 'bg-pink-950 border-neonPink' : 'bg-gray-950 border-gray-800'
+              }`}
+            >
+              <Text className={`text-xs font-bold ${filterTarget === 'partner' ? 'text-neonPink' : 'text-gray-400'}`}>
+                💖 {i18n.t('forPartner')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setFilterTarget('both')}
+              className={`px-3 py-1.5 rounded-full border ${
+                filterTarget === 'both' ? 'bg-yellow-950 border-yellow-400' : 'bg-gray-950 border-gray-800'
+              }`}
+            >
+              <Text className={`text-xs font-bold ${filterTarget === 'both' ? 'text-yellow-400' : 'text-gray-400'}`}>
+                ✨ {i18n.t('forBoth')}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        {/* View Mode Rendering */}
+        {viewMode === 'month' && (
+          <View>
+            {/* Month Navigator Header */}
+            <View className="flex-row justify-between items-center mb-4">
+              <TouchableOpacity onPress={handlePrevMonth} className="p-2">
+                <FontAwesome name="chevron-left" size={22} color="#00FFFF" />
+              </TouchableOpacity>
+              <Text className="text-2xl text-white font-extrabold">
+                {i18n.t(`months.${currentDate.getMonth()}`)} {currentDate.getFullYear()}
+              </Text>
+              <TouchableOpacity onPress={handleNextMonth} className="p-2">
+                <FontAwesome name="chevron-right" size={22} color="#00FFFF" />
+              </TouchableOpacity>
             </View>
 
-            {/* Day Note & Details Modal */}
-            <DayNoteModal
-                visible={dayModalVisible}
-                date={selectedDate}
-                initialCount={sessionMap[selectedDate] || 0}
-                initialNote={noteMap[selectedDate] || ''}
-                onClose={() => setDayModalVisible(false)}
-                onSave={handleSaveDayModal}
-                onDeleteNote={handleDeleteNote}
-            />
+            {/* Week Days Header */}
+            <View className="flex-row mb-1 border-b border-gray-800 pb-2">
+              {getDaysShort().map((day: string, index: number) => (
+                <View key={index} className="w-[14.2%] items-center">
+                  <Text className="text-gray-500 font-bold uppercase text-xs">{day}</Text>
+                </View>
+              ))}
+            </View>
 
-            {/* Pairing Modal */}
-            <PairingModal
-                visible={pairingModalVisible}
-                onClose={() => setPairingModalVisible(false)}
+            {/* Month Days Grid */}
+            <View className="flex-row flex-wrap border-b border-gray-800 pb-2">
+              {renderMonthDays()}
+            </View>
+
+            {/* Daily Schedule Below the Grid */}
+            <DailyScheduleList
+              selectedDate={selectedDate}
+              events={selectedDayEvents}
+              onAddEvent={handleOpenAddEvent}
+              onEditEvent={handleOpenEditEvent}
+              dailyNote={noteMap[selectedDate]}
+              onEditNote={(dateStr) => {
+                setSelectedDate(dateStr);
+                setDayNoteModalVisible(true);
+              }}
             />
-        </SafeAreaView>
-    );
+          </View>
+        )}
+
+        {viewMode === 'week' && (
+          <WeekView
+            currentDate={currentDate}
+            onDateChange={setCurrentDate}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            events={filteredEvents}
+            sessionMap={sessionMap}
+            onAddEvent={handleOpenAddEvent}
+            onEditEvent={handleOpenEditEvent}
+          />
+        )}
+
+        {viewMode === 'day' && (
+          <DayView
+            currentDate={new Date(selectedDate)}
+            onDateChange={(d) => {
+              const str = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              setSelectedDate(str);
+            }}
+            events={filteredEvents}
+            sessionMap={sessionMap}
+            onAddEvent={handleOpenAddEvent}
+            onEditEvent={handleOpenEditEvent}
+            dailyNote={noteMap[selectedDate]}
+            onEditNote={(dateStr) => {
+              setSelectedDate(dateStr);
+              setDayNoteModalVisible(true);
+            }}
+          />
+        )}
+      </ScrollView>
+
+      {/* Modals */}
+      <EventModal
+        visible={eventModalVisible}
+        eventToEdit={selectedEventToEdit}
+        defaultDate={selectedDate}
+        onClose={() => setEventModalVisible(false)}
+        onSave={handleSaveEvent}
+        onDelete={handleDeleteEvent}
+      />
+
+      <DayNoteModal
+        visible={dayNoteModalVisible}
+        date={selectedDate}
+        initialCount={sessionMap[selectedDate] || 0}
+        initialNote={noteMap[selectedDate] || ''}
+        onClose={() => setDayNoteModalVisible(false)}
+        onSave={async (dStr, newCount, noteContent) => {
+          const oldCount = sessionMap[dStr] || 0;
+          if (newCount !== oldCount) {
+            await updateSession(dStr, newCount - oldCount);
+          }
+          const trimmed = noteContent.trim();
+          await setNoteByDate(dStr, trimmed);
+          setNoteMap(prev => {
+            const next = { ...prev };
+            if (!trimmed) delete next[dStr];
+            else next[dStr] = trimmed;
+            return next;
+          });
+          syncService.sendNoteUpdate(dStr, trimmed);
+        }}
+        onDeleteNote={async (dStr) => {
+          await deleteNoteByDate(dStr);
+          setNoteMap(prev => {
+            const next = { ...prev };
+            delete next[dStr];
+            return next;
+          });
+          syncService.sendNoteUpdate(dStr, '');
+        }}
+      />
+
+      <PairingModal
+        visible={pairingModalVisible}
+        onClose={() => setPairingModalVisible(false)}
+      />
+    </SafeAreaView>
+  );
 }

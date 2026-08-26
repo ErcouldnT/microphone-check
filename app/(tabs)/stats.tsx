@@ -12,6 +12,8 @@ import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { syncService } from '@/services/syncService';
 import { getAllNotes, setNoteByDate } from '@/db/notes';
+import { getAllEvents, saveEvent } from '@/db/events';
+import { getAllCounters, saveCounter } from '@/db/counters';
 
 export default function StatsScreen() {
   const [totalSessions, setTotalSessions] = useState(0);
@@ -94,12 +96,16 @@ export default function StatsScreen() {
     try {
       const allSessions = await db.select().from(sessions);
       const allNotes = await getAllNotes();
+      const allEvents = await getAllEvents();
+      const allCounters = await getAllCounters();
 
       const exportPayload = {
-        version: 2,
+        version: 3,
         exportedAt: Date.now(),
         sessions: allSessions,
         notes: allNotes,
+        events: allEvents,
+        counters: allCounters,
       };
 
       const json = JSON.stringify(exportPayload, null, 2);
@@ -133,6 +139,8 @@ export default function StatsScreen() {
 
       let importedSessionsCount = 0;
       let importedNotesCount = 0;
+      let importedEventsCount = 0;
+      let importedCountersCount = 0;
 
       // Case 1: Legacy format (Array of sessions)
       if (Array.isArray(data)) {
@@ -152,7 +160,7 @@ export default function StatsScreen() {
           }
         }
       }
-      // Case 2: New Versioned Format (Object with sessions and notes)
+      // Case 2: Versioned Format (Object with sessions, notes, events, counters)
       else if (data && typeof data === 'object') {
         if (Array.isArray(data.sessions)) {
           for (const item of data.sessions) {
@@ -180,11 +188,29 @@ export default function StatsScreen() {
             }
           }
         }
+
+        if (Array.isArray(data.events)) {
+          for (const item of data.events) {
+            if (item.id && item.title && item.startDate) {
+              await saveEvent(item);
+              importedEventsCount++;
+            }
+          }
+        }
+
+        if (Array.isArray(data.counters)) {
+          for (const item of data.counters) {
+            if (item.id && item.title && item.targetDate) {
+              await saveCounter(item);
+              importedCountersCount++;
+            }
+          }
+        }
       }
 
       Alert.alert(
         i18n.t('importSuccess'),
-        `${importedSessionsCount} records, ${importedNotesCount} notes processed.`
+        `${importedSessionsCount} records, ${importedNotesCount} notes, ${importedEventsCount} events, ${importedCountersCount} counters processed.`
       );
       loadStats();
     } catch (e) {

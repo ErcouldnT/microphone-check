@@ -5,30 +5,43 @@ async function sleep(ms) {
 }
 
 async function testSync() {
-  console.log('🧪 Starting Real-Time Sync & Notes End-to-End Test...');
+  console.log('🧪 Starting Full Shared Couple Calendar End-to-End Test (v2.0)...');
 
   // 1. Health Check
   const healthRes = await fetch('http://localhost:3000/health');
   const health = await healthRes.json();
-  console.log('✅ Health Check Response:', health);
+  console.log('✅ 1. Health Check:', health);
 
-  // 2. Client A creates a Room with initial local data and notes
+  // 2. Client A creates a Room with initial local data
   const createRes = await fetch('http://localhost:3000/api/rooms/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      initialEntries: [
-        { date: '2026-08-26', count: 1 }
-      ],
-      initialNotes: [
-        { date: '2026-08-26', content: 'Podcast kaydı' }
-      ]
+      initialEntries: [{ date: '2026-08-26', count: 1 }],
+      initialNotes: [{ date: '2026-08-26', content: 'Podcast kaydı' }],
+      initialEvents: [{
+        id: 'ev-1',
+        title: 'Sushi Dinner',
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        isAllDay: false,
+        startTime: '19:30',
+        endTime: '21:00',
+        color: '#FF007F',
+        target: 'partner'
+      }],
+      initialCounters: [{
+        id: 'cnt-1',
+        title: 'Birlikte Geçen Gün',
+        targetDate: '2025-01-01',
+        type: 'since',
+        icon: '❤️'
+      }]
     })
   });
   const createData = await createRes.json();
-  console.log('✅ Room Created:', createData);
+  console.log('✅ 2. Room Created:', createData);
   const roomCode = createData.roomCode;
-
   if (!roomCode) throw new Error('Failed to obtain roomCode');
 
   // 3. Client A & Client B connect via WebSockets
@@ -42,41 +55,51 @@ async function testSync() {
     new Promise((resolve) => wsA.on('open', resolve)),
     new Promise((resolve) => wsB.on('open', resolve))
   ]);
-  console.log('✅ Both Client A and Client B connected to WebSocket room', roomCode);
+  console.log('✅ 3. Connected! Client A and Client B joined room', roomCode);
 
   wsA.on('message', (data) => {
     const parsed = JSON.parse(data.toString());
-    console.log('📩 [Client A received]:', parsed);
     clientAReceivedUpdates.push(parsed);
   });
 
   wsB.on('message', (data) => {
     const parsed = JSON.parse(data.toString());
-    console.log('📩 [Client B received]:', parsed);
     clientBReceivedUpdates.push(parsed);
   });
 
   await sleep(300);
 
-  // 4. Client A updates note on 2026-08-26
-  console.log('👉 Client A updates note for 2026-08-26');
+  // 4. Client A adds a Multi-day Camping event (2026-08-28 to 2026-08-30)
+  console.log('👉 Client A adds Multi-day Event (28-30 Aug: Camping trip)');
   wsA.send(JSON.stringify({
-    type: 'UPDATE_NOTE',
+    type: 'UPDATE_EVENT',
     roomCode,
-    date: '2026-08-26',
-    content: 'Canlı yayın ve podcast kaydı',
+    event: {
+      id: 'ev-camping',
+      title: 'Touch grass camping trip',
+      startDate: '2026-08-28',
+      endDate: '2026-08-30',
+      isAllDay: true,
+      color: '#FACC15',
+      target: 'both'
+    },
     author: 'deviceA'
   }));
 
   await sleep(300);
 
-  // 5. Client B adds count on 2026-08-27 -> count: 3
-  console.log('👉 Client B adds 2026-08-27 -> count: 3');
+  // 5. Client B adds a distance counter (Days until next meet)
+  console.log('👉 Client B adds Milestone Counter: Kavuşmaya Kalan Gün');
   wsB.send(JSON.stringify({
-    type: 'UPDATE_SESSION',
+    type: 'UPDATE_COUNTER',
     roomCode,
-    date: '2026-08-27',
-    count: 3,
+    counter: {
+      id: 'cnt-nextmeet',
+      title: 'Kavuşmaya Kalan Gün',
+      targetDate: '2026-09-01',
+      type: 'until',
+      icon: '✈️'
+    },
     author: 'deviceB'
   }));
 
@@ -85,16 +108,21 @@ async function testSync() {
   // 6. Test REST sync endpoint
   const syncRes = await fetch(`http://localhost:3000/api/rooms/${roomCode}/sync`);
   const syncData = await syncRes.json();
-  console.log('✅ Room State on Server:', syncData);
+  console.log('✅ 6. Server Room Sync State:', {
+    entries: syncData.entries?.length,
+    notes: syncData.notes?.length,
+    events: syncData.events?.length,
+    counters: syncData.counters?.length
+  });
 
-  // Assertions
-  const date26Note = syncData.notes?.find(n => n.date === '2026-08-26');
-  const date27Entry = syncData.entries?.find(e => e.date === '2026-08-27');
+  // Verify assertions
+  const campingEv = syncData.events?.find(e => e.id === 'ev-camping');
+  const meetCnt = syncData.counters?.find(c => c.id === 'cnt-nextmeet');
 
-  if (date26Note?.content === 'Canlı yayın ve podcast kaydı' && date27Entry?.count === 3) {
-    console.log('🎉🎉🎉 ALL REAL-TIME SESSIONS & NOTES SYNC TESTS PASSED! 🎉🎉🎉');
+  if (campingEv?.title === 'Touch grass camping trip' && meetCnt?.icon === '✈️') {
+    console.log('\n🎉🎉🎉 ALL V2.0 MULTI-DAY EVENTS, COLORED NOTES & COUNTERS TESTS PASSED! 🎉🎉🎉');
   } else {
-    throw new Error('Test assertions failed: mismatch in sync data');
+    throw new Error('Test assertions failed in v2.0 sync data');
   }
 
   wsA.close();

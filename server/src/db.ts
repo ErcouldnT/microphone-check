@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { CalendarEntry, CalendarNote, Room } from './types.js';
+import { CalendarEntry, CalendarNote, CalendarEvent, RelationshipCounter, Room } from './types.js';
 
 const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'calendar.db');
 
@@ -48,8 +48,38 @@ export function initDb() {
       UNIQUE(room_id, date)
     );
 
+    CREATE TABLE IF NOT EXISTS room_events (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      is_all_day INTEGER DEFAULT 1,
+      color TEXT NOT NULL,
+      target TEXT NOT NULL,
+      author TEXT,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS room_counters (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      target_date TEXT NOT NULL,
+      type TEXT NOT NULL,
+      icon TEXT,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_entries_room_date ON calendar_entries(room_id, date);
     CREATE INDEX IF NOT EXISTS idx_notes_room_date ON room_notes(room_id, date);
+    CREATE INDEX IF NOT EXISTS idx_events_room ON room_events(room_id);
+    CREATE INDEX IF NOT EXISTS idx_counters_room ON room_counters(room_id);
     CREATE INDEX IF NOT EXISTS idx_rooms_code ON rooms(code);
   `);
 }
@@ -164,7 +194,7 @@ export function bulkUpsertCalendarEntries(roomId: string, entries: Array<{ date:
   transaction(entries);
 }
 
-// Calendar Notes (Daily Plans & Notes)
+// Calendar Notes
 export function getRoomNotes(roomId: string): CalendarNote[] {
   const stmt = db.prepare(`
     SELECT id, room_id as roomId, date, content, updated_at as updatedAt, updated_by as updatedBy
@@ -227,4 +257,191 @@ export function bulkUpsertRoomNotes(roomId: string, notes: Array<{ date: string;
   });
 
   transaction(notes);
+}
+
+// Calendar Events
+export function getRoomEvents(roomId: string): CalendarEvent[] {
+  const stmt = db.prepare(`
+    SELECT id, room_id as roomId, title, description, start_date as startDate, end_date as endDate,
+           start_time as startTime, end_time as endTime, is_all_day as isAllDay, color, target,
+           author, updated_at as updatedAt
+    FROM room_events
+    WHERE room_id = ?
+    ORDER BY start_date ASC, start_time ASC
+  `);
+  const rows = stmt.all(roomId) as any[];
+  return rows.map(r => ({
+    id: r.id,
+    roomId: r.roomId,
+    title: r.title,
+    description: r.description || undefined,
+    startDate: r.startDate,
+    endDate: r.endDate,
+    startTime: r.startTime || undefined,
+    endTime: r.endTime || undefined,
+    isAllDay: Boolean(r.isAllDay),
+    color: r.color,
+    target: r.target,
+    author: r.author || undefined,
+    updatedAt: r.updatedAt,
+  }));
+}
+
+export function upsertRoomEvent(roomId: string, event: CalendarEvent, author?: string): CalendarEvent {
+  const now = Date.now();
+  touchRoom(roomId);
+
+  const stmt = db.prepare(`
+    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, author, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      description = excluded.description,
+      start_date = excluded.start_date,
+      end_date = excluded.end_date,
+      start_time = excluded.start_time,
+      end_time = excluded.end_time,
+      is_all_day = excluded.is_all_day,
+      color = excluded.color,
+      target = excluded.target,
+      author = excluded.author,
+      updated_at = excluded.updated_at
+  `);
+
+  stmt.run(
+    event.id,
+    roomId,
+    event.title,
+    event.description || null,
+    event.startDate,
+    event.endDate,
+    event.startTime || null,
+    event.endTime || null,
+    event.isAllDay ? 1 : 0,
+    event.color,
+    event.target,
+    author || event.author || null,
+    now
+  );
+
+  return { ...event, roomId, author: author || event.author, updatedAt: now };
+}
+
+export function deleteRoomEvent(roomId: string, eventId: string) {
+  touchRoom(roomId);
+  const stmt = db.prepare('DELETE FROM room_events WHERE room_id = ? AND id = ?');
+  stmt.run(roomId, eventId);
+}
+
+export function bulkUpsertRoomEvents(roomId: string, events: CalendarEvent[]) {
+  const now = Date.now();
+  touchRoom(roomId);
+
+  const stmt = db.prepare(`
+    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, author, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      description = excluded.description,
+      start_date = excluded.start_date,
+      end_date = excluded.end_date,
+      start_time = excluded.start_time,
+      end_time = excluded.end_time,
+      is_all_day = excluded.is_all_day,
+      color = excluded.color,
+      target = excluded.target,
+      author = excluded.author,
+      updated_at = excluded.updated_at
+  `);
+
+  const transaction = db.transaction((items: CalendarEvent[]) => {
+    for (const e of items) {
+      stmt.run(
+        e.id,
+        roomId,
+        e.title,
+        e.description || null,
+        e.startDate,
+        e.endDate,
+        e.startTime || null,
+        e.endTime || null,
+        e.isAllDay ? 1 : 0,
+        e.color,
+        e.target,
+        e.author || null,
+        now
+      );
+    }
+  });
+
+  transaction(events);
+}
+
+// Relationship Counters
+export function getRoomCounters(roomId: string): RelationshipCounter[] {
+  const stmt = db.prepare(`
+    SELECT id, room_id as roomId, title, target_date as targetDate, type, icon, updated_at as updatedAt
+    FROM room_counters
+    WHERE room_id = ?
+    ORDER BY target_date ASC
+  `);
+  return stmt.all(roomId) as RelationshipCounter[];
+}
+
+export function upsertRoomCounter(roomId: string, counter: RelationshipCounter): RelationshipCounter {
+  const now = Date.now();
+  touchRoom(roomId);
+
+  const stmt = db.prepare(`
+    INSERT INTO room_counters (id, room_id, title, target_date, type, icon, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      target_date = excluded.target_date,
+      type = excluded.type,
+      icon = excluded.icon,
+      updated_at = excluded.updated_at
+  `);
+
+  stmt.run(
+    counter.id,
+    roomId,
+    counter.title,
+    counter.targetDate,
+    counter.type,
+    counter.icon || null,
+    now
+  );
+
+  return { ...counter, roomId, updatedAt: now };
+}
+
+export function deleteRoomCounter(roomId: string, counterId: string) {
+  touchRoom(roomId);
+  const stmt = db.prepare('DELETE FROM room_counters WHERE room_id = ? AND id = ?');
+  stmt.run(roomId, counterId);
+}
+
+export function bulkUpsertRoomCounters(roomId: string, counters: RelationshipCounter[]) {
+  const now = Date.now();
+  touchRoom(roomId);
+
+  const stmt = db.prepare(`
+    INSERT INTO room_counters (id, room_id, title, target_date, type, icon, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      title = excluded.title,
+      target_date = excluded.target_date,
+      type = excluded.type,
+      icon = excluded.icon,
+      updated_at = excluded.updated_at
+  `);
+
+  const transaction = db.transaction((items: RelationshipCounter[]) => {
+    for (const c of items) {
+      stmt.run(c.id, roomId, c.title, c.targetDate, c.type, c.icon || null, now);
+    }
+  });
+
+  transaction(counters);
 }

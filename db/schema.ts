@@ -20,3 +20,28 @@ export const notes = sqliteTable("notes", {
     updatedAt: integer("updated_at").$defaultFn(() => Date.now()),
 });
 
+export const events = sqliteTable("events", {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description"),
+    startDate: text("start_date").notNull(), // YYYY-MM-DD
+    endDate: text("end_date").notNull(),     // YYYY-MM-DD
+    startTime: text("start_time"),           // HH:mm (optional)
+    endTime: text("end_time"),               // HH:mm (optional)
+    isAllDay: integer("is_all_day").default(1).notNull(),
+    color: text("color").notNull(),          // Hex code e.g. #00FFFF, #FF007F, #FACC15
+    target: text("target").notNull(),        // 'you', 'partner', 'both'
+    author: text("author"),
+    createdAt: integer("created_at").$defaultFn(() => Date.now()),
+    updatedAt: integer("updated_at").$defaultFn(() => Date.now()),
+});
+
+export const counters = sqliteTable("counters", {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    targetDate: text("target_date").notNull(), // YYYY-MM-DD
+    type: text("type").notNull(),              // 'since' (e.g. first meet) or 'until' (e.g. next meet)
+    icon: text("icon"),                        // emoji or icon name
+    createdAt: integer("created_at").$defaultFn(() => Date.now()),
+    updatedAt: integer("updated_at").$defaultFn(() => Date.now()),
+});

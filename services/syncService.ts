@@ -1,22 +1,12 @@
 import { getSetting, setSetting, removeSetting } from '@/db/settings';
 import { db } from '@/db/client';
-import { sessions, notes } from '@/db/schema';
+import { sessions, notes, events, counters } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { setNoteByDate, getAllNotes } from '@/db/notes';
+import { CalendarEvent, getAllEvents, saveEvent, deleteEvent, bulkSetEvents } from '@/db/events';
+import { RelationshipCounter, getAllCounters, saveCounter, deleteCounter, bulkSetCounters } from '@/db/counters';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'local';
-
-export interface CalendarSyncEntry {
-  date: string;
-  count: number;
-}
-
-export interface CalendarSyncNote {
-  date: string;
-  content: string;
-  updatedBy?: string;
-  updatedAt?: number;
-}
 
 export interface SessionUpdatedPayload {
   date: string;
@@ -32,9 +22,20 @@ export interface NoteUpdatedPayload {
   timestamp: number;
 }
 
+export interface NotificationPayload {
+  id: string;
+  title: string;
+  message: string;
+  type: 'event' | 'note' | 'counter';
+  timestamp: number;
+}
+
 type StatusListener = (status: ConnectionStatus) => void;
 type SessionListener = (payload: SessionUpdatedPayload) => void;
 type NoteListener = (payload: NoteUpdatedPayload) => void;
+type EventListener = (event: CalendarEvent, action: 'upsert' | 'delete') => void;
+type CounterListener = (counter: RelationshipCounter, action: 'upsert' | 'delete') => void;
+type NotificationListener = (payload: NotificationPayload) => void;
 type SyncListener = () => void;
 
 class SyncService {
@@ -51,6 +52,9 @@ class SyncService {
   private statusListeners: Set<StatusListener> = new Set();
   private sessionListeners: Set<SessionListener> = new Set();
   private noteListeners: Set<NoteListener> = new Set();
+  private eventListeners: Set<EventListener> = new Set();
+  private counterListeners: Set<CounterListener> = new Set();
+  private notificationListeners: Set<NotificationListener> = new Set();
   private syncListeners: Set<SyncListener> = new Set();
 
   private constructor() {
@@ -87,6 +91,10 @@ class SyncService {
     return this.roomCode;
   }
 
+  public getDeviceId(): string {
+    return this.deviceId;
+  }
+
   public getServerUrl(): string {
     return this.serverUrl;
   }
@@ -119,6 +127,21 @@ class SyncService {
   public addNoteListener(listener: NoteListener) {
     this.noteListeners.add(listener);
     return () => this.noteListeners.delete(listener);
+  }
+
+  public addEventListener(listener: EventListener) {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
+  }
+
+  public addCounterListener(listener: CounterListener) {
+    this.counterListeners.add(listener);
+    return () => this.counterListeners.delete(listener);
+  }
+
+  public addNotificationListener(listener: NotificationListener) {
+    this.notificationListeners.add(listener);
+    return () => this.notificationListeners.delete(listener);
   }
 
   public addSyncListener(listener: SyncListener) {
@@ -167,14 +190,13 @@ class SyncService {
         // Start ping heartbeat
         this.startHeartbeat();
 
-        // Send explicit JOIN_ROOM in case query params weren't processed
         this.sendWsMessage({
           type: 'JOIN_ROOM',
           roomCode: this.roomCode!,
           deviceId: this.deviceId
         });
 
-        // Sync with REST endpoint to ensure everything is up to date
+        // Sync with REST endpoint
         this.syncWithServer();
       };
 
@@ -253,6 +275,17 @@ class SyncService {
     }
   }
 
+  private notify(title: string, message: string, type: 'event' | 'note' | 'counter') {
+    const payload: NotificationPayload = {
+      id: Math.random().toString(36).substring(2, 9),
+      title,
+      message,
+      type,
+      timestamp: Date.now()
+    };
+    this.notificationListeners.forEach(listener => listener(payload));
+  }
+
   private async handleWsMessage(msg: any) {
     switch (msg.type) {
       case 'SESSION_UPDATED': {
@@ -267,6 +300,51 @@ class SyncService {
         await setNoteByDate(date, content);
         this.noteListeners.forEach(listener => listener({ date, content, author, timestamp }));
         this.syncListeners.forEach(listener => listener());
+        if (author && author !== this.deviceId) {
+          this.notify('Günlük Not Güncellendi', `${date} için not güncellendi.`, 'note');
+        }
+        break;
+      }
+      case 'EVENT_UPDATED': {
+        const { event, author } = msg;
+        if (event) {
+          await saveEvent(event);
+          this.eventListeners.forEach(listener => listener(event, 'upsert'));
+          this.syncListeners.forEach(listener => listener());
+          if (author && author !== this.deviceId) {
+            this.notify('Takvim Planı Eklendi', `"${event.title}" (${event.startDate})`, 'event');
+          }
+        }
+        break;
+      }
+      case 'EVENT_DELETED': {
+        const { eventId, author } = msg;
+        if (eventId) {
+          await deleteEvent(eventId);
+          this.eventListeners.forEach(listener => listener({ id: eventId } as any, 'delete'));
+          this.syncListeners.forEach(listener => listener());
+          if (author && author !== this.deviceId) {
+            this.notify('Plan Silindi', 'Takvimden bir etkinlik silindi.', 'event');
+          }
+        }
+        break;
+      }
+      case 'COUNTER_UPDATED': {
+        const { counter, author } = msg;
+        if (counter) {
+          await saveCounter(counter);
+          this.counterListeners.forEach(listener => listener(counter, 'upsert'));
+          this.syncListeners.forEach(listener => listener());
+        }
+        break;
+      }
+      case 'COUNTER_DELETED': {
+        const { counterId } = msg;
+        if (counterId) {
+          await deleteCounter(counterId);
+          this.counterListeners.forEach(listener => listener({ id: counterId } as any, 'delete'));
+          this.syncListeners.forEach(listener => listener());
+        }
         break;
       }
       case 'SYNC_DATA': {
@@ -275,6 +353,12 @@ class SyncService {
         }
         if (Array.isArray(msg.notes)) {
           await this.applyNotesSyncToLocalDb(msg.notes);
+        }
+        if (Array.isArray(msg.events)) {
+          await bulkSetEvents(msg.events);
+        }
+        if (Array.isArray(msg.counters)) {
+          await bulkSetCounters(msg.counters);
         }
         this.syncListeners.forEach(listener => listener());
         break;
@@ -342,23 +426,21 @@ class SyncService {
     }
   }
 
-  // Send session counter update to server
+  // Send session counter update
   public async sendSessionUpdate(date: string, count: number) {
     if (!this.roomCode) return;
-
     this.sendWsMessage({
       type: 'UPDATE_SESSION',
       roomCode: this.roomCode,
       date,
       count,
-      deviceId: this.deviceId
+      author: this.deviceId
     });
   }
 
-  // Send note update to server
+  // Send note update
   public async sendNoteUpdate(date: string, content: string) {
     if (!this.roomCode) return;
-
     this.sendWsMessage({
       type: 'UPDATE_NOTE',
       roomCode: this.roomCode,
@@ -368,11 +450,69 @@ class SyncService {
     });
   }
 
+  // Send event create/update
+  public async sendEventUpdate(event: CalendarEvent) {
+    await saveEvent(event);
+    this.syncListeners.forEach(listener => listener());
+
+    if (!this.roomCode) return;
+    this.sendWsMessage({
+      type: 'UPDATE_EVENT',
+      roomCode: this.roomCode,
+      event,
+      author: this.deviceId
+    });
+  }
+
+  // Send event delete
+  public async sendEventDelete(eventId: string) {
+    await deleteEvent(eventId);
+    this.syncListeners.forEach(listener => listener());
+
+    if (!this.roomCode) return;
+    this.sendWsMessage({
+      type: 'DELETE_EVENT',
+      roomCode: this.roomCode,
+      eventId,
+      author: this.deviceId
+    });
+  }
+
+  // Send counter create/update
+  public async sendCounterUpdate(counter: RelationshipCounter) {
+    await saveCounter(counter);
+    this.syncListeners.forEach(listener => listener());
+
+    if (!this.roomCode) return;
+    this.sendWsMessage({
+      type: 'UPDATE_COUNTER',
+      roomCode: this.roomCode,
+      counter,
+      author: this.deviceId
+    });
+  }
+
+  // Send counter delete
+  public async sendCounterDelete(counterId: string) {
+    await deleteCounter(counterId);
+    this.syncListeners.forEach(listener => listener());
+
+    if (!this.roomCode) return;
+    this.sendWsMessage({
+      type: 'DELETE_COUNTER',
+      roomCode: this.roomCode,
+      counterId,
+      author: this.deviceId
+    });
+  }
+
   // REST: Create Room
   public async createRoom(includeLocalData: boolean = true): Promise<{ success: boolean; roomCode?: string; error?: string }> {
     try {
       let initialEntries: Array<{ date: string; count: number }> = [];
       let initialNotes: Array<{ date: string; content: string }> = [];
+      let initialEvents: CalendarEvent[] = [];
+      let initialCounters: RelationshipCounter[] = [];
 
       if (includeLocalData) {
         const localSessions = await db.select().from(sessions);
@@ -380,12 +520,20 @@ class SyncService {
 
         const localNotes = await getAllNotes();
         initialNotes = localNotes.map(n => ({ date: n.date, content: n.content }));
+
+        initialEvents = await getAllEvents();
+        initialCounters = await getAllCounters();
       }
 
       const res = await fetch(`${this.serverUrl}/api/rooms/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initialEntries, initialNotes })
+        body: JSON.stringify({
+          initialEntries,
+          initialNotes,
+          initialEvents,
+          initialCounters
+        })
       });
 
       const data = await res.json();
@@ -422,15 +570,12 @@ class SyncService {
       this.roomCode = formattedCode;
       await setSetting('room_code', formattedCode);
 
-      if (Array.isArray(data.entries)) {
-        await this.applyFullSyncToLocalDb(data.entries);
-      }
-      if (Array.isArray(data.notes)) {
-        await this.applyNotesSyncToLocalDb(data.notes);
-      }
+      if (Array.isArray(data.entries)) await this.applyFullSyncToLocalDb(data.entries);
+      if (Array.isArray(data.notes)) await this.applyNotesSyncToLocalDb(data.notes);
+      if (Array.isArray(data.events)) await bulkSetEvents(data.events);
+      if (Array.isArray(data.counters)) await bulkSetCounters(data.counters);
 
       this.syncListeners.forEach(listener => listener());
-
       this.disconnect();
       this.connect();
 
@@ -440,7 +585,7 @@ class SyncService {
     }
   }
 
-  // REST: Fetch full room state
+  // REST: Sync full room state
   public async syncWithServer(): Promise<void> {
     if (!this.roomCode) return;
     try {
@@ -448,12 +593,10 @@ class SyncService {
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
-          if (Array.isArray(data.entries)) {
-            await this.applyFullSyncToLocalDb(data.entries);
-          }
-          if (Array.isArray(data.notes)) {
-            await this.applyNotesSyncToLocalDb(data.notes);
-          }
+          if (Array.isArray(data.entries)) await this.applyFullSyncToLocalDb(data.entries);
+          if (Array.isArray(data.notes)) await this.applyNotesSyncToLocalDb(data.notes);
+          if (Array.isArray(data.events)) await bulkSetEvents(data.events);
+          if (Array.isArray(data.counters)) await bulkSetCounters(data.counters);
           this.syncListeners.forEach(listener => listener());
         }
       }
@@ -462,7 +605,7 @@ class SyncService {
     }
   }
 
-  // REST: Push all local data to room
+  // REST: Push all local data
   public async pushAllLocalData(): Promise<{ success: boolean; error?: string }> {
     if (!this.roomCode) return { success: false, error: 'Oda seçili değil' };
     try {
@@ -472,10 +615,19 @@ class SyncService {
       const localNotes = await getAllNotes();
       const notesList = localNotes.map(n => ({ date: n.date, content: n.content }));
 
+      const eventsList = await getAllEvents();
+      const countersList = await getAllCounters();
+
       const res = await fetch(`${this.serverUrl}/api/rooms/${this.roomCode}/push-all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries, notes: notesList, author: this.deviceId })
+        body: JSON.stringify({
+          entries,
+          notes: notesList,
+          events: eventsList,
+          counters: countersList,
+          author: this.deviceId
+        })
       });
 
       const data = await res.json();

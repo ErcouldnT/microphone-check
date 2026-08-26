@@ -1,0 +1,162 @@
+import React from 'react';
+import { View, Text, TouchableOpacity } from 'react-native';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import i18n from '@/i18n';
+import { CalendarEvent } from '@/db/events';
+
+interface DailyScheduleListProps {
+  selectedDate: string; // YYYY-MM-DD
+  events: CalendarEvent[];
+  onAddEvent: (date: string) => void;
+  onEditEvent: (event: CalendarEvent) => void;
+  dailyNote?: string;
+  onEditNote?: (date: string) => void;
+}
+
+export default function DailyScheduleList({
+  selectedDate,
+  events,
+  onAddEvent,
+  onEditEvent,
+  dailyNote,
+  onEditNote,
+}: DailyScheduleListProps) {
+  // Format localized date
+  const getFormattedDate = () => {
+    if (!selectedDate) return '';
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const monthName = i18n.t(`months.${m - 1}`);
+    return `${d} ${monthName} ${y}`;
+  };
+
+  const getTargetBadge = (target: string) => {
+    if (target === 'you') {
+      return (
+        <View className="bg-cyan-950/80 border border-neonCyan/40 px-2 py-0.5 rounded-md flex-row items-center">
+          <Text className="text-[10px] text-neonCyan font-bold">👤 {i18n.t('forYou')}</Text>
+        </View>
+      );
+    }
+    if (target === 'partner') {
+      return (
+        <View className="bg-pink-950/80 border border-neonPink/40 px-2 py-0.5 rounded-md flex-row items-center">
+          <Text className="text-[10px] text-neonPink font-bold">💖 {i18n.t('forPartner')}</Text>
+        </View>
+      );
+    }
+    return (
+      <View className="bg-yellow-950/80 border border-yellow-400/40 px-2 py-0.5 rounded-md flex-row items-center">
+        <Text className="text-[10px] text-yellow-400 font-bold">✨ {i18n.t('forBoth')}</Text>
+      </View>
+    );
+  };
+
+  return (
+    <View className="bg-gray-950 border border-gray-800 rounded-3xl p-4 mt-6 mb-8">
+      {/* Header */}
+      <View className="flex-row justify-between items-center mb-3 pb-3 border-b border-gray-800">
+        <View>
+          <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider">
+            {i18n.t('scheduleForDay')}
+          </Text>
+          <Text className="text-white font-extrabold text-lg mt-0.5">
+            {getFormattedDate()}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => onAddEvent(selectedDate)}
+          className="bg-neonCyan/20 border border-neonCyan px-3 py-1.5 rounded-full flex-row items-center"
+        >
+          <FontAwesome name="plus" size={12} color="#00FFFF" style={{ marginRight: 6 }} />
+          <Text className="text-neonCyan text-xs font-bold">{i18n.t('addEvent')}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Daily Note Preview (if exists) */}
+      {dailyNote ? (
+        <TouchableOpacity
+          onPress={() => onEditNote && onEditNote(selectedDate)}
+          className="bg-purple-950/40 border border-purple-800/60 p-3 rounded-2xl mb-3 flex-row items-center justify-between"
+        >
+          <View className="flex-row items-center flex-1 mr-2">
+            <FontAwesome name="pencil-square" size={14} color="#c084fc" style={{ marginRight: 8 }} />
+            <Text className="text-purple-200 text-xs flex-1" numberOfLines={2}>
+              {dailyNote}
+            </Text>
+          </View>
+          <FontAwesome name="chevron-right" size={10} color="#c084fc" />
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Events List */}
+      {events.length === 0 ? (
+        <View className="py-6 items-center justify-center">
+          <FontAwesome name="calendar-o" size={28} color="#444" style={{ marginBottom: 8 }} />
+          <Text className="text-gray-500 text-sm font-medium text-center mb-3">
+            {i18n.t('noEventsForDay')}
+          </Text>
+          <TouchableOpacity
+            onPress={() => onAddEvent(selectedDate)}
+            className="bg-gray-900 border border-gray-700 px-4 py-2 rounded-xl flex-row items-center"
+          >
+            <FontAwesome name="plus" size={12} color="#00FFFF" style={{ marginRight: 6 }} />
+            <Text className="text-white text-xs font-bold">{i18n.t('addEvent')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View className="space-y-2">
+          {events.map((e) => {
+            const isMultiDay = e.startDate !== e.endDate;
+            return (
+              <TouchableOpacity
+                key={e.id}
+                activeOpacity={0.8}
+                onPress={() => onEditEvent(e)}
+                className="bg-gray-900 border border-gray-800/80 p-3 rounded-2xl flex-row items-center justify-between mb-2"
+              >
+                <View className="flex-row items-center flex-1 mr-2">
+                  {/* Left Colored Stripe */}
+                  <View
+                    className="w-2.5 h-10 rounded-full mr-3"
+                    style={{ backgroundColor: e.color || '#00FFFF' }}
+                  />
+
+                  <View className="flex-1">
+                    <View className="flex-row items-center mb-1">
+                      <Text className="text-white font-bold text-sm mr-2" numberOfLines={1}>
+                        {e.title}
+                      </Text>
+                      {getTargetBadge(e.target)}
+                    </View>
+
+                    {/* Time / Span details */}
+                    <View className="flex-row items-center">
+                      <FontAwesome name="clock-o" size={10} color="#888" style={{ marginRight: 4 }} />
+                      <Text className="text-gray-400 text-xs">
+                        {e.isAllDay
+                          ? isMultiDay
+                            ? `${e.startDate.substring(5)} ➔ ${e.endDate.substring(5)} (${i18n.t('allDay')})`
+                            : i18n.t('allDay')
+                          : `${e.startTime || ''} - ${e.endTime || ''}`}
+                      </Text>
+                    </View>
+
+                    {/* Description preview */}
+                    {e.description ? (
+                      <Text className="text-gray-500 text-[11px] mt-1" numberOfLines={1}>
+                        {e.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                <FontAwesome name="angle-right" size={16} color="#666" />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}

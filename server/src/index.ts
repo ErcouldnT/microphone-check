@@ -11,7 +11,15 @@ import {
   bulkUpsertCalendarEntries,
   getRoomNotes,
   upsertRoomNote,
-  bulkUpsertRoomNotes
+  bulkUpsertRoomNotes,
+  getRoomEvents,
+  upsertRoomEvent,
+  deleteRoomEvent,
+  bulkUpsertRoomEvents,
+  getRoomCounters,
+  upsertRoomCounter,
+  deleteRoomCounter,
+  bulkUpsertRoomCounters
 } from './db.js';
 import { roomManager } from './rooms.js';
 import { ClientMessage, ServerMessage } from './types.js';
@@ -39,7 +47,7 @@ app.get('/health', (req: Request, res: Response) => {
 // 1. Create a new Room
 app.post('/api/rooms/create', (req: Request, res: Response) => {
   try {
-    const { customCode, initialEntries, initialNotes } = req.body || {};
+    const { customCode, initialEntries, initialNotes, initialEvents, initialCounters } = req.body || {};
     const room = createRoom(customCode);
 
     if (Array.isArray(initialEntries) && initialEntries.length > 0) {
@@ -48,6 +56,14 @@ app.post('/api/rooms/create', (req: Request, res: Response) => {
 
     if (Array.isArray(initialNotes) && initialNotes.length > 0) {
       bulkUpsertRoomNotes(room.id, initialNotes);
+    }
+
+    if (Array.isArray(initialEvents) && initialEvents.length > 0) {
+      bulkUpsertRoomEvents(room.id, initialEvents);
+    }
+
+    if (Array.isArray(initialCounters) && initialCounters.length > 0) {
+      bulkUpsertRoomCounters(room.id, initialCounters);
     }
 
     res.json({
@@ -76,13 +92,17 @@ app.post('/api/rooms/join', (req: Request, res: Response) => {
 
     const entries = getRoomEntries(room.id);
     const notes = getRoomNotes(room.id);
+    const events = getRoomEvents(room.id);
+    const counters = getRoomCounters(room.id);
 
     res.json({
       success: true,
       roomCode: room.code,
       roomId: room.id,
       entries,
-      notes
+      notes,
+      events,
+      counters
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -100,24 +120,28 @@ app.get('/api/rooms/:code/sync', (req: Request, res: Response) => {
 
     const entries = getRoomEntries(room.id);
     const notes = getRoomNotes(room.id);
+    const events = getRoomEvents(room.id);
+    const counters = getRoomCounters(room.id);
 
     res.json({
       success: true,
       roomCode: room.code,
       roomId: room.id,
       entries,
-      notes
+      notes,
+      events,
+      counters
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 4. Bulk push local entries and notes to room
+// 4. Bulk push all local data to room
 app.post('/api/rooms/:code/push-all', (req: Request, res: Response) => {
   try {
     const { code } = req.params;
-    const { entries, notes, author } = req.body;
+    const { entries, notes, events, counters, author } = req.body;
 
     const room = getRoomByCode(code);
     if (!room) {
@@ -138,20 +162,34 @@ app.post('/api/rooms/:code/push-all', (req: Request, res: Response) => {
       );
     }
 
+    if (Array.isArray(events) && events.length > 0) {
+      bulkUpsertRoomEvents(room.id, events);
+    }
+
+    if (Array.isArray(counters) && counters.length > 0) {
+      bulkUpsertRoomCounters(room.id, counters);
+    }
+
     // Broadcast full sync to connected clients in room
     const allEntries = getRoomEntries(room.id);
     const allNotes = getRoomNotes(room.id);
+    const allEvents = getRoomEvents(room.id);
+    const allCounters = getRoomCounters(room.id);
 
     roomManager.broadcastToRoom(room.code, {
       type: 'SYNC_DATA',
       entries: allEntries,
-      notes: allNotes
+      notes: allNotes,
+      events: allEvents,
+      counters: allCounters
     });
 
     res.json({
       success: true,
       entriesCount: entries?.length || 0,
-      notesCount: notes?.length || 0
+      notesCount: notes?.length || 0,
+      eventsCount: events?.length || 0,
+      countersCount: counters?.length || 0
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -165,7 +203,6 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws: WebSocket, req) => {
-  // Support roomCode passed via query params (e.g. ?room=MIC-1234&device=xyz)
   try {
     const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
     const queryRoom = url.searchParams.get('room');
@@ -177,6 +214,8 @@ wss.on('connection', (ws: WebSocket, req) => {
         const membersCount = roomManager.joinRoom(ws, room.code, room.id, queryDevice || undefined);
         const entries = getRoomEntries(room.id);
         const notes = getRoomNotes(room.id);
+        const events = getRoomEvents(room.id);
+        const counters = getRoomCounters(room.id);
 
         const joinedMsg: ServerMessage = {
           type: 'ROOM_JOINED',
@@ -188,7 +227,9 @@ wss.on('connection', (ws: WebSocket, req) => {
         const syncMsg: ServerMessage = {
           type: 'SYNC_DATA',
           entries,
-          notes
+          notes,
+          events,
+          counters
         };
         ws.send(JSON.stringify(syncMsg));
       }
@@ -219,6 +260,8 @@ wss.on('connection', (ws: WebSocket, req) => {
         const membersCount = roomManager.joinRoom(ws, room.code, room.id, msg.deviceId);
         const entries = getRoomEntries(room.id);
         const notes = getRoomNotes(room.id);
+        const events = getRoomEvents(room.id);
+        const counters = getRoomCounters(room.id);
 
         const joinedMsg: ServerMessage = {
           type: 'ROOM_JOINED',
@@ -230,7 +273,9 @@ wss.on('connection', (ws: WebSocket, req) => {
         const syncMsg: ServerMessage = {
           type: 'SYNC_DATA',
           entries,
-          notes
+          notes,
+          events,
+          counters
         };
         ws.send(JSON.stringify(syncMsg));
         return;
@@ -239,22 +284,13 @@ wss.on('connection', (ws: WebSocket, req) => {
       if (msg.type === 'UPDATE_SESSION') {
         const client = roomManager.getClient(ws);
         const roomCode = msg.roomCode || client?.roomCode;
-
-        if (!roomCode) {
-          const errMsg: ServerMessage = { type: 'ERROR', message: 'Not connected to any room' };
-          return ws.send(JSON.stringify(errMsg));
-        }
+        if (!roomCode) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Not in room' }));
 
         const room = getRoomByCode(roomCode);
-        if (!room) {
-          const errMsg: ServerMessage = { type: 'ERROR', message: 'Room does not exist' };
-          return ws.send(JSON.stringify(errMsg));
-        }
+        if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
 
-        // Save in SQLite DB
         upsertCalendarEntry(room.id, msg.date, msg.count, msg.author);
 
-        // Broadcast to all other clients in the room in real-time
         const updateMsg: ServerMessage = {
           type: 'SESSION_UPDATED',
           date: msg.date,
@@ -262,7 +298,6 @@ wss.on('connection', (ws: WebSocket, req) => {
           author: msg.author,
           timestamp: Date.now()
         };
-
         roomManager.broadcastToRoom(room.code, updateMsg, ws);
         return;
       }
@@ -270,22 +305,13 @@ wss.on('connection', (ws: WebSocket, req) => {
       if (msg.type === 'UPDATE_NOTE') {
         const client = roomManager.getClient(ws);
         const roomCode = msg.roomCode || client?.roomCode;
-
-        if (!roomCode) {
-          const errMsg: ServerMessage = { type: 'ERROR', message: 'Not connected to any room' };
-          return ws.send(JSON.stringify(errMsg));
-        }
+        if (!roomCode) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Not in room' }));
 
         const room = getRoomByCode(roomCode);
-        if (!room) {
-          const errMsg: ServerMessage = { type: 'ERROR', message: 'Room does not exist' };
-          return ws.send(JSON.stringify(errMsg));
-        }
+        if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
 
-        // Save note in SQLite DB
         upsertRoomNote(room.id, msg.date, msg.content, msg.author);
 
-        // Broadcast note update in real-time
         const noteMsg: ServerMessage = {
           type: 'NOTE_UPDATED',
           date: msg.date,
@@ -293,8 +319,87 @@ wss.on('connection', (ws: WebSocket, req) => {
           author: msg.author,
           timestamp: Date.now()
         };
-
         roomManager.broadcastToRoom(room.code, noteMsg, ws);
+        return;
+      }
+
+      if (msg.type === 'UPDATE_EVENT') {
+        const client = roomManager.getClient(ws);
+        const roomCode = msg.roomCode || client?.roomCode;
+        if (!roomCode) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Not in room' }));
+
+        const room = getRoomByCode(roomCode);
+        if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
+
+        const saved = upsertRoomEvent(room.id, msg.event, msg.author);
+
+        const eventMsg: ServerMessage = {
+          type: 'EVENT_UPDATED',
+          event: saved,
+          author: msg.author,
+          timestamp: Date.now()
+        };
+        roomManager.broadcastToRoom(room.code, eventMsg, ws);
+        return;
+      }
+
+      if (msg.type === 'DELETE_EVENT') {
+        const client = roomManager.getClient(ws);
+        const roomCode = msg.roomCode || client?.roomCode;
+        if (!roomCode) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Not in room' }));
+
+        const room = getRoomByCode(roomCode);
+        if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
+
+        deleteRoomEvent(room.id, msg.eventId);
+
+        const delMsg: ServerMessage = {
+          type: 'EVENT_DELETED',
+          eventId: msg.eventId,
+          author: msg.author,
+          timestamp: Date.now()
+        };
+        roomManager.broadcastToRoom(room.code, delMsg, ws);
+        return;
+      }
+
+      if (msg.type === 'UPDATE_COUNTER') {
+        const client = roomManager.getClient(ws);
+        const roomCode = msg.roomCode || client?.roomCode;
+        if (!roomCode) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Not in room' }));
+
+        const room = getRoomByCode(roomCode);
+        if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
+
+        const saved = upsertRoomCounter(room.id, msg.counter);
+
+        const counterMsg: ServerMessage = {
+          type: 'COUNTER_UPDATED',
+          counter: saved,
+          author: msg.author,
+          timestamp: Date.now()
+        };
+        roomManager.broadcastToRoom(room.code, counterMsg, ws);
+        return;
+      }
+
+      if (msg.type === 'DELETE_COUNTER') {
+        const client = roomManager.getClient(ws);
+        const roomCode = msg.roomCode || client?.roomCode;
+        if (!roomCode) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Not in room' }));
+
+        const room = getRoomByCode(roomCode);
+        if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
+
+        deleteRoomCounter(room.id, msg.counterId);
+
+        const delMsg: ServerMessage = {
+          type: 'COUNTER_DELETED',
+          counterId: msg.counterId,
+          author: msg.author,
+          timestamp: Date.now()
+        };
+        roomManager.broadcastToRoom(room.code, delMsg, ws);
         return;
       }
     } catch (err: any) {
