@@ -48,7 +48,7 @@ const translations = {
             0: "Ocak", 1: "Şubat", 2: "Mart", 3: "Nisan", 4: "Mayıs", 5: "Haziran",
             6: "Temmuz", 7: "Ağustos", 8: "Eylül", 9: "Ekim", 10: "Kasım", 11: "Aralık"
         },
-        daysShort: ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"]
+        daysShort: ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
     },
     en: {
         calendar: "Calendar",
@@ -96,7 +96,7 @@ const translations = {
             0: "January", 1: "February", 2: "March", 3: "April", 4: "May", 5: "June",
             6: "July", 7: "August", 8: "September", 9: "October", 10: "November", 11: "December"
         },
-        daysShort: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        daysShort: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     },
     ru: {
         calendar: "Календарь",
@@ -126,7 +126,7 @@ const translations = {
         connecting: "Подключение...",
         offline: "Офлайн",
         localMode: "Локальный режим",
-        leaveRoom: "Покинуть комнату",
+        leaveRoom: "Поkiнуть комнату",
         leaveRoomConfirm: "Вы уверены, что хотите выйти? Локальные данные сохранятся.",
         copyCode: "Копировать код",
         codeCopied: "Код скопирован в буфер обмена!",
@@ -144,7 +144,7 @@ const translations = {
             0: "Январь", 1: "Февраль", 2: "Март", 3: "Апрель", 4: "Май", 5: "Июнь",
             6: "Июль", 7: "Август", 8: "Сентябрь", 9: "Октябрь", 10: "Ноябрь", 11: "Декабрь"
         },
-        daysShort: ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
+        daysShort: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
     }
 };
 

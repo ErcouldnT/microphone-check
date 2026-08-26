@@ -98,7 +98,10 @@ export default function CalendarView() {
     }, [year, month]);
 
     const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
-    const getFirstDayOfMonth = (y: number, m: number) => new Date(y, m, 1).getDay(); // 0-6 Sun-Sat
+    const getFirstDayOfMonth = (y: number, m: number) => {
+        const day = new Date(y, m, 1).getDay(); // 0(Sun) - 6(Sat)
+        return day === 0 ? 6 : day - 1; // 0(Mon) - 6(Sun)
+    };
 
     const daysInMonth = getDaysInMonth(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
