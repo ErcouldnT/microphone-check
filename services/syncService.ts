@@ -1,13 +1,21 @@
 import { getSetting, setSetting, removeSetting } from '@/db/settings';
 import { db } from '@/db/client';
-import { sessions } from '@/db/schema';
+import { sessions, notes } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { setNoteByDate, getAllNotes } from '@/db/notes';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'local';
 
 export interface CalendarSyncEntry {
   date: string;
   count: number;
+}
+
+export interface CalendarSyncNote {
+  date: string;
+  content: string;
+  updatedBy?: string;
+  updatedAt?: number;
 }
 
 export interface SessionUpdatedPayload {
@@ -17,8 +25,16 @@ export interface SessionUpdatedPayload {
   timestamp: number;
 }
 
+export interface NoteUpdatedPayload {
+  date: string;
+  content: string;
+  author?: string;
+  timestamp: number;
+}
+
 type StatusListener = (status: ConnectionStatus) => void;
 type SessionListener = (payload: SessionUpdatedPayload) => void;
+type NoteListener = (payload: NoteUpdatedPayload) => void;
 type SyncListener = () => void;
 
 class SyncService {
@@ -34,6 +50,7 @@ class SyncService {
 
   private statusListeners: Set<StatusListener> = new Set();
   private sessionListeners: Set<SessionListener> = new Set();
+  private noteListeners: Set<NoteListener> = new Set();
   private syncListeners: Set<SyncListener> = new Set();
 
   private constructor() {
@@ -97,6 +114,11 @@ class SyncService {
   public addSessionListener(listener: SessionListener) {
     this.sessionListeners.add(listener);
     return () => this.sessionListeners.delete(listener);
+  }
+
+  public addNoteListener(listener: NoteListener) {
+    this.noteListeners.add(listener);
+    return () => this.noteListeners.delete(listener);
   }
 
   public addSyncListener(listener: SyncListener) {
@@ -240,11 +262,21 @@ class SyncService {
         this.syncListeners.forEach(listener => listener());
         break;
       }
+      case 'NOTE_UPDATED': {
+        const { date, content, author, timestamp } = msg;
+        await setNoteByDate(date, content);
+        this.noteListeners.forEach(listener => listener({ date, content, author, timestamp }));
+        this.syncListeners.forEach(listener => listener());
+        break;
+      }
       case 'SYNC_DATA': {
         if (Array.isArray(msg.entries)) {
           await this.applyFullSyncToLocalDb(msg.entries);
-          this.syncListeners.forEach(listener => listener());
         }
+        if (Array.isArray(msg.notes)) {
+          await this.applyNotesSyncToLocalDb(msg.notes);
+        }
+        this.syncListeners.forEach(listener => listener());
         break;
       }
       case 'ROOM_JOINED': {
@@ -264,7 +296,6 @@ class SyncService {
       } else {
         if (existing.length > 0) {
           await db.update(sessions).set({ count }).where(eq(sessions.id, existing[0].id));
-          // Clean duplicate rows if any
           if (existing.length > 1) {
             for (let i = 1; i < existing.length; i++) {
               await db.delete(sessions).where(eq(sessions.id, existing[i].id));
@@ -281,7 +312,6 @@ class SyncService {
 
   private async applyFullSyncToLocalDb(entries: Array<{ date: string; count: number }>) {
     try {
-      // Clear local sessions and replace with server room data
       await db.delete(sessions);
       for (const item of entries) {
         if (item.date && item.count > 0) {
@@ -296,7 +326,23 @@ class SyncService {
     }
   }
 
-  // Send update to server when user changes a count in UI
+  private async applyNotesSyncToLocalDb(notesList: Array<{ date: string; content: string }>) {
+    try {
+      await db.delete(notes);
+      for (const item of notesList) {
+        if (item.date && item.content) {
+          await db.insert(notes).values({
+            date: item.date,
+            content: item.content
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Error applying notes sync to local SQLite:', e);
+    }
+  }
+
+  // Send session counter update to server
   public async sendSessionUpdate(date: string, count: number) {
     if (!this.roomCode) return;
 
@@ -309,19 +355,37 @@ class SyncService {
     });
   }
 
+  // Send note update to server
+  public async sendNoteUpdate(date: string, content: string) {
+    if (!this.roomCode) return;
+
+    this.sendWsMessage({
+      type: 'UPDATE_NOTE',
+      roomCode: this.roomCode,
+      date,
+      content,
+      author: this.deviceId
+    });
+  }
+
   // REST: Create Room
   public async createRoom(includeLocalData: boolean = true): Promise<{ success: boolean; roomCode?: string; error?: string }> {
     try {
       let initialEntries: Array<{ date: string; count: number }> = [];
+      let initialNotes: Array<{ date: string; content: string }> = [];
+
       if (includeLocalData) {
         const localSessions = await db.select().from(sessions);
         initialEntries = localSessions.map((s: { date: string; count: number }) => ({ date: s.date, count: s.count }));
+
+        const localNotes = await getAllNotes();
+        initialNotes = localNotes.map(n => ({ date: n.date, content: n.content }));
       }
 
       const res = await fetch(`${this.serverUrl}/api/rooms/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initialEntries })
+        body: JSON.stringify({ initialEntries, initialNotes })
       });
 
       const data = await res.json();
@@ -360,8 +424,12 @@ class SyncService {
 
       if (Array.isArray(data.entries)) {
         await this.applyFullSyncToLocalDb(data.entries);
-        this.syncListeners.forEach(listener => listener());
       }
+      if (Array.isArray(data.notes)) {
+        await this.applyNotesSyncToLocalDb(data.notes);
+      }
+
+      this.syncListeners.forEach(listener => listener());
 
       this.disconnect();
       this.connect();
@@ -379,8 +447,13 @@ class SyncService {
       const res = await fetch(`${this.serverUrl}/api/rooms/${this.roomCode}/sync`);
       if (res.ok) {
         const data = await res.json();
-        if (data.success && Array.isArray(data.entries)) {
-          await this.applyFullSyncToLocalDb(data.entries);
+        if (data.success) {
+          if (Array.isArray(data.entries)) {
+            await this.applyFullSyncToLocalDb(data.entries);
+          }
+          if (Array.isArray(data.notes)) {
+            await this.applyNotesSyncToLocalDb(data.notes);
+          }
           this.syncListeners.forEach(listener => listener());
         }
       }
@@ -396,10 +469,13 @@ class SyncService {
       const localSessions = await db.select().from(sessions);
       const entries = localSessions.map((s: { date: string; count: number }) => ({ date: s.date, count: s.count }));
 
+      const localNotes = await getAllNotes();
+      const notesList = localNotes.map(n => ({ date: n.date, content: n.content }));
+
       const res = await fetch(`${this.serverUrl}/api/rooms/${this.roomCode}/push-all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries, author: this.deviceId })
+        body: JSON.stringify({ entries, notes: notesList, author: this.deviceId })
       });
 
       const data = await res.json();

@@ -1,25 +1,27 @@
 import { WebSocket } from 'ws';
-import http from 'http';
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function testSync() {
-  console.log('🧪 Starting Real-Time Sync End-to-End Test...');
+  console.log('🧪 Starting Real-Time Sync & Notes End-to-End Test...');
 
   // 1. Health Check
   const healthRes = await fetch('http://localhost:3000/health');
   const health = await healthRes.json();
   console.log('✅ Health Check Response:', health);
 
-  // 2. Client A creates a Room with initial local data
+  // 2. Client A creates a Room with initial local data and notes
   const createRes = await fetch('http://localhost:3000/api/rooms/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       initialEntries: [
         { date: '2026-08-26', count: 1 }
+      ],
+      initialNotes: [
+        { date: '2026-08-26', content: 'Podcast kaydı' }
       ]
     })
   });
@@ -54,15 +56,15 @@ async function testSync() {
     clientBReceivedUpdates.push(parsed);
   });
 
-  await sleep(200);
+  await sleep(300);
 
-  // 4. Client A increments count on 2026-08-26 from 1 to 2
-  console.log('👉 Client A increments 2026-08-26 -> count: 2');
+  // 4. Client A updates note on 2026-08-26
+  console.log('👉 Client A updates note for 2026-08-26');
   wsA.send(JSON.stringify({
-    type: 'UPDATE_SESSION',
+    type: 'UPDATE_NOTE',
     roomCode,
     date: '2026-08-26',
-    count: 2,
+    content: 'Canlı yayın ve podcast kaydı',
     author: 'deviceA'
   }));
 
@@ -86,13 +88,13 @@ async function testSync() {
   console.log('✅ Room State on Server:', syncData);
 
   // Assertions
-  const date26 = syncData.entries.find(e => e.date === '2026-08-26');
-  const date27 = syncData.entries.find(e => e.date === '2026-08-27');
+  const date26Note = syncData.notes?.find(n => n.date === '2026-08-26');
+  const date27Entry = syncData.entries?.find(e => e.date === '2026-08-27');
 
-  if (date26?.count === 2 && date27?.count === 3) {
-    console.log('🎉🎉🎉 ALL REAL-TIME SYNC TESTS PASSED SUCCESSFULLY! 🎉🎉🎉');
+  if (date26Note?.content === 'Canlı yayın ve podcast kaydı' && date27Entry?.count === 3) {
+    console.log('🎉🎉🎉 ALL REAL-TIME SESSIONS & NOTES SYNC TESTS PASSED! 🎉🎉🎉');
   } else {
-    throw new Error('Test assertions failed: count mismatch in sync data');
+    throw new Error('Test assertions failed: mismatch in sync data');
   }
 
   wsA.close();

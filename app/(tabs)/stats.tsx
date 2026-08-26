@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { syncService } from '@/services/syncService';
+import { getAllNotes, setNoteByDate } from '@/db/notes';
 
 export default function StatsScreen() {
   const [totalSessions, setTotalSessions] = useState(0);
@@ -30,7 +31,7 @@ export default function StatsScreen() {
       });
 
       const aggregatedList = Object.keys(grouped).map(date => ({
-        id: date, // usage of date as unique key
+        id: date,
         date,
         count: grouped[date]
       })).sort((a, b) => b.date.localeCompare(a.date));
@@ -45,7 +46,6 @@ export default function StatsScreen() {
       // Calculate Top Month
       const monthMap: Record<string, number> = {};
       aggregatedList.forEach(s => {
-        // s.date is YYYY-MM-DD
         const monthKey = s.date.substring(0, 7); // YYYY-MM
         monthMap[monthKey] = (monthMap[monthKey] || 0) + s.count;
       });
@@ -92,8 +92,17 @@ export default function StatsScreen() {
 
   const handleExport = async () => {
     try {
-      const allData = await db.select().from(sessions);
-      const json = JSON.stringify(allData, null, 2);
+      const allSessions = await db.select().from(sessions);
+      const allNotes = await getAllNotes();
+
+      const exportPayload = {
+        version: 2,
+        exportedAt: Date.now(),
+        sessions: allSessions,
+        notes: allNotes,
+      };
+
+      const json = JSON.stringify(exportPayload, null, 2);
       const fileUri = FileSystem.documentDirectory + 'microphone-check-backup.json';
 
       await FileSystem.writeAsStringAsync(fileUri, json);
@@ -122,14 +131,15 @@ export default function StatsScreen() {
       const jsonString = await FileSystem.readAsStringAsync(fileUri);
       const data = JSON.parse(jsonString);
 
+      let importedSessionsCount = 0;
+      let importedNotesCount = 0;
+
+      // Case 1: Legacy format (Array of sessions)
       if (Array.isArray(data)) {
-        let importedCount = 0;
         for (const item of data) {
           if (item.date && typeof item.count === 'number') {
-            // Check if exists
             const existing = await db.select().from(sessions).where(eq(sessions.date, item.date));
             if (existing.length > 0) {
-              // Merge/Add to existing (Additive logic)
               const existingId = existing[0].id;
               await db.update(sessions).set({ count: existing[0].count + item.count }).where(eq(sessions.id, existingId));
             } else {
@@ -138,12 +148,45 @@ export default function StatsScreen() {
                 count: item.count
               });
             }
-            importedCount++;
+            importedSessionsCount++;
           }
         }
-        Alert.alert(i18n.t('importSuccess'), `${importedCount} records processed.`);
-        loadStats();
       }
+      // Case 2: New Versioned Format (Object with sessions and notes)
+      else if (data && typeof data === 'object') {
+        if (Array.isArray(data.sessions)) {
+          for (const item of data.sessions) {
+            if (item.date && typeof item.count === 'number') {
+              const existing = await db.select().from(sessions).where(eq(sessions.date, item.date));
+              if (existing.length > 0) {
+                const existingId = existing[0].id;
+                await db.update(sessions).set({ count: existing[0].count + item.count }).where(eq(sessions.id, existingId));
+              } else {
+                await db.insert(sessions).values({
+                  date: item.date,
+                  count: item.count
+                });
+              }
+              importedSessionsCount++;
+            }
+          }
+        }
+
+        if (Array.isArray(data.notes)) {
+          for (const item of data.notes) {
+            if (item.date && item.content) {
+              await setNoteByDate(item.date, item.content);
+              importedNotesCount++;
+            }
+          }
+        }
+      }
+
+      Alert.alert(
+        i18n.t('importSuccess'),
+        `${importedSessionsCount} records, ${importedNotesCount} notes processed.`
+      );
+      loadStats();
     } catch (e) {
       console.error(e);
       Alert.alert(i18n.t('error'), "Import failed");

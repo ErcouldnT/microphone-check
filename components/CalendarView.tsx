@@ -8,7 +8,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PairingModal from './PairingModal';
+import DayNoteModal from './DayNoteModal';
 import { syncService, ConnectionStatus } from '@/services/syncService';
+import { getAllNotes, setNoteByDate, deleteNoteByDate } from '@/db/notes';
 
 // Use i18n for days
 const getDaysShort = () => i18n.t('daysShort') as unknown as string[];
@@ -16,7 +18,10 @@ const getDaysShort = () => i18n.t('daysShort') as unknown as string[];
 export default function CalendarView() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [sessionMap, setSessionMap] = useState<Record<string, number>>({});
+    const [noteMap, setNoteMap] = useState<Record<string, string>>({});
     const [pairingModalVisible, setPairingModalVisible] = useState(false);
+    const [dayModalVisible, setDayModalVisible] = useState(false);
+    const [selectedDate, setSelectedDate] = useState<string>('');
     const [syncStatus, setSyncStatus] = useState<ConnectionStatus>('local');
     const [roomCode, setRoomCode] = useState<string | null>(null);
 
@@ -27,6 +32,7 @@ export default function CalendarView() {
 
     const loadData = async () => {
         try {
+            // Load sessions
             const allSessions = await db.select().from(sessions);
             const map: Record<string, number> = {};
             allSessions.forEach(s => {
@@ -34,6 +40,16 @@ export default function CalendarView() {
             });
             setSessionMap(map);
             calculateMonthStats(map, year, month);
+
+            // Load notes
+            const allNotes = await getAllNotes();
+            const nMap: Record<string, string> = {};
+            allNotes.forEach(n => {
+                if (n.content?.trim()) {
+                    nMap[n.date] = n.content.trim();
+                }
+            });
+            setNoteMap(nMap);
         } catch (e) {
             console.error(e);
         }
@@ -78,6 +94,19 @@ export default function CalendarView() {
             });
         });
 
+        // Listen for remote real-time note updates
+        const unsubNote = syncService.addNoteListener(({ date, content }) => {
+            setNoteMap(prev => {
+                const next = { ...prev };
+                if (!content || !content.trim()) {
+                    delete next[date];
+                } else {
+                    next[date] = content.trim();
+                }
+                return next;
+            });
+        });
+
         // Listen for full sync events
         const unsubSync = syncService.addSyncListener(() => {
             loadData();
@@ -92,6 +121,7 @@ export default function CalendarView() {
 
         return () => {
             unsubSession();
+            unsubNote();
             unsubSync();
             unsubStatus();
         };
@@ -120,12 +150,10 @@ export default function CalendarView() {
     // Helper to handle updates
     const updateSession = async (dayString: string, change: number) => {
         try {
-            // Find existing sessions for this date
             const existing = await db.select().from(sessions).where(eq(sessions.date, dayString));
             let newCount = 0;
 
             if (existing.length > 0) {
-                // We have existing rows, consolidate them if multiple or update first
                 const currentTotal = existing.reduce((acc, curr) => acc + curr.count, 0);
                 newCount = currentTotal + change;
 
@@ -177,6 +205,55 @@ export default function CalendarView() {
     const handleIncrement = (dayString: string) => updateSession(dayString, 1);
     const handleDecrement = (dayString: string) => updateSession(dayString, -1);
 
+    const handleOpenDayModal = (dayString: string) => {
+        setSelectedDate(dayString);
+        setDayModalVisible(true);
+    };
+
+    const handleSaveDayModal = async (dateStr: string, newCount: number, noteContent: string) => {
+        try {
+            // 1. Update session count if changed
+            const oldCount = sessionMap[dateStr] || 0;
+            if (newCount !== oldCount) {
+                const diff = newCount - oldCount;
+                await updateSession(dateStr, diff);
+            }
+
+            // 2. Update note
+            const trimmed = noteContent.trim();
+            await setNoteByDate(dateStr, trimmed);
+
+            setNoteMap(prev => {
+                const next = { ...prev };
+                if (!trimmed) {
+                    delete next[dateStr];
+                } else {
+                    next[dateStr] = trimmed;
+                }
+                return next;
+            });
+
+            // Send note update over WebSocket
+            syncService.sendNoteUpdate(dateStr, trimmed);
+        } catch (e) {
+            console.error('Error saving day modal:', e);
+        }
+    };
+
+    const handleDeleteNote = async (dateStr: string) => {
+        try {
+            await deleteNoteByDate(dateStr);
+            setNoteMap(prev => {
+                const next = { ...prev };
+                delete next[dateStr];
+                return next;
+            });
+            syncService.sendNoteUpdate(dateStr, '');
+        } catch (e) {
+            console.error('Error deleting note:', e);
+        }
+    };
+
     const renderDays = () => {
         const days = [];
         // blanks
@@ -187,21 +264,35 @@ export default function CalendarView() {
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const count = sessionMap[dateStr] || 0;
+            const hasNote = Boolean(noteMap[dateStr]);
             const isToday = new Date().toDateString() === new Date(year, month, d).toDateString();
 
             days.push(
                 <TouchableOpacity
                     key={d}
                     onPress={() => handleIncrement(dateStr)}
-                    onLongPress={() => handleDecrement(dateStr)}
-                    delayLongPress={500}
-                    className={`w-[14.2%] h-14 items-center justify-center border-gray-800 border-[0.5px] ${isToday ? 'bg-gray-800' : ''}`}
+                    onLongPress={() => handleOpenDayModal(dateStr)}
+                    delayLongPress={400}
+                    className={`w-[14.2%] h-14 items-center justify-center border-gray-800 border-[0.5px] relative ${
+                        isToday ? 'bg-gray-800' : ''
+                    }`}
                 >
+                    {/* Note indicator badge at top right */}
+                    {hasNote ? (
+                        <TouchableOpacity
+                            onPress={() => handleOpenDayModal(dateStr)}
+                            className="absolute top-1 right-1"
+                        >
+                            <FontAwesome name="pencil" size={9} color="#c084fc" />
+                        </TouchableOpacity>
+                    ) : null}
+
                     <Text className={`text-lg font-bold ${count > 0 ? 'text-neonPink' : 'text-gray-400'}`}>
                         {d}
                     </Text>
+
                     {count > 0 && (
-                        <View className="flex-row items-center mt-1">
+                        <View className="flex-row items-center mt-0.5">
                             <FontAwesome name="microphone" size={10} color="#00FFFF" />
                             <Text className="text-[10px] text-neonCyan ml-1">{count > 9 ? '9+' : count}</Text>
                         </View>
@@ -259,7 +350,6 @@ export default function CalendarView() {
                         <FontAwesome name="chevron-left" size={24} color="#00FFFF" />
                     </TouchableOpacity>
                     <Text className="text-2xl text-white font-bold">
-                        {/* Manual month lookup from i18n since toLocaleString is tricky with custom langs */}
                         {i18n.t(`months.${currentDate.getMonth()}`)} {currentDate.getFullYear()}
                     </Text>
                     <TouchableOpacity onPress={handleNextMonth} className="p-2">
@@ -297,6 +387,17 @@ export default function CalendarView() {
                 </View>
             </View>
 
+            {/* Day Note & Details Modal */}
+            <DayNoteModal
+                visible={dayModalVisible}
+                date={selectedDate}
+                initialCount={sessionMap[selectedDate] || 0}
+                initialNote={noteMap[selectedDate] || ''}
+                onClose={() => setDayModalVisible(false)}
+                onSave={handleSaveDayModal}
+                onDeleteNote={handleDeleteNote}
+            />
+
             {/* Pairing Modal */}
             <PairingModal
                 visible={pairingModalVisible}
@@ -305,4 +406,3 @@ export default function CalendarView() {
         </SafeAreaView>
     );
 }
-

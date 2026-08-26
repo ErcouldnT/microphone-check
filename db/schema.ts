@@ -12,3 +12,11 @@ export const settings = sqliteTable("settings", {
     value: text("value").notNull(),
 });
 
+export const notes = sqliteTable("notes", {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    date: text("date").notNull().unique(), // ISO Date String YYYY-MM-DD
+    content: text("content").notNull(),
+    createdAt: integer("created_at").$defaultFn(() => Date.now()),
+    updatedAt: integer("updated_at").$defaultFn(() => Date.now()),
+});
+

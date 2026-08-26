@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { CalendarEntry, Room } from './types.js';
+import { CalendarEntry, CalendarNote, Room } from './types.js';
 
 const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'calendar.db');
 
@@ -37,7 +37,19 @@ export function initDb() {
       UNIQUE(room_id, date)
     );
 
+    CREATE TABLE IF NOT EXISTS room_notes (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      content TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      updated_by TEXT,
+      FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+      UNIQUE(room_id, date)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_entries_room_date ON calendar_entries(room_id, date);
+    CREATE INDEX IF NOT EXISTS idx_notes_room_date ON room_notes(room_id, date);
     CREATE INDEX IF NOT EXISTS idx_rooms_code ON rooms(code);
   `);
 }
@@ -89,6 +101,7 @@ export function touchRoom(roomId: string) {
   stmt.run(Date.now(), roomId);
 }
 
+// Calendar Entries (Count)
 export function getRoomEntries(roomId: string): CalendarEntry[] {
   const stmt = db.prepare(`
     SELECT id, room_id as roomId, date, count, updated_at as updatedAt, updated_by as updatedBy
@@ -149,4 +162,69 @@ export function bulkUpsertCalendarEntries(roomId: string, entries: Array<{ date:
   });
 
   transaction(entries);
+}
+
+// Calendar Notes (Daily Plans & Notes)
+export function getRoomNotes(roomId: string): CalendarNote[] {
+  const stmt = db.prepare(`
+    SELECT id, room_id as roomId, date, content, updated_at as updatedAt, updated_by as updatedBy
+    FROM room_notes
+    WHERE room_id = ?
+    ORDER BY date ASC
+  `);
+  return stmt.all(roomId) as CalendarNote[];
+}
+
+export function upsertRoomNote(roomId: string, date: string, content: string, updatedBy?: string): CalendarNote {
+  const now = Date.now();
+  touchRoom(roomId);
+
+  const trimmed = content.trim();
+  if (!trimmed) {
+    const deleteStmt = db.prepare('DELETE FROM room_notes WHERE room_id = ? AND date = ?');
+    deleteStmt.run(roomId, date);
+    return { roomId, date, content: '', updatedAt: now, updatedBy };
+  }
+
+  const id = crypto.randomUUID();
+  const upsertStmt = db.prepare(`
+    INSERT INTO room_notes (id, room_id, date, content, updated_at, updated_by)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(room_id, date) DO UPDATE SET
+      content = excluded.content,
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by
+  `);
+  upsertStmt.run(id, roomId, date, trimmed, now, updatedBy || null);
+
+  return { id, roomId, date, content: trimmed, updatedAt: now, updatedBy };
+}
+
+export function bulkUpsertRoomNotes(roomId: string, notes: Array<{ date: string; content: string; updatedBy?: string }>) {
+  const now = Date.now();
+  touchRoom(roomId);
+
+  const insertStmt = db.prepare(`
+    INSERT INTO room_notes (id, room_id, date, content, updated_at, updated_by)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(room_id, date) DO UPDATE SET
+      content = excluded.content,
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by
+  `);
+
+  const deleteStmt = db.prepare('DELETE FROM room_notes WHERE room_id = ? AND date = ?');
+
+  const transaction = db.transaction((items: Array<{ date: string; content: string; updatedBy?: string }>) => {
+    for (const item of items) {
+      const trimmed = item.content?.trim();
+      if (!trimmed) {
+        deleteStmt.run(roomId, item.date);
+      } else {
+        insertStmt.run(crypto.randomUUID(), roomId, item.date, trimmed, now, item.updatedBy || null);
+      }
+    }
+  });
+
+  transaction(notes);
 }

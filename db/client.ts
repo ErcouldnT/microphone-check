@@ -19,5 +19,12 @@ export const initDb = async () => {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT UNIQUE NOT NULL,
+      content TEXT NOT NULL,
+      created_at INTEGER,
+      updated_at INTEGER
+    );
   `);
 };
