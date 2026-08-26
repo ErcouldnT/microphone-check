@@ -7,9 +7,10 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { syncService } from '@/services/syncService';
 
 export default function StatsScreen() {
   const [totalSessions, setTotalSessions] = useState(0);
@@ -79,6 +80,15 @@ export default function StatsScreen() {
       loadStats();
     }, [])
   );
+
+  useEffect(() => {
+    const unsubSync = syncService.addSyncListener(loadStats);
+    const unsubSession = syncService.addSessionListener(loadStats);
+    return () => {
+      unsubSync();
+      unsubSession();
+    };
+  }, []);
 
   const handleExport = async () => {
     try {

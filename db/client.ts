@@ -15,5 +15,9 @@ export const initDb = async () => {
       count INTEGER DEFAULT 0 NOT NULL,
       created_at INTEGER
     );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 };

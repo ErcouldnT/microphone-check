@@ -39,3 +39,11 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# backend server
+server/dist/
+server/data/
+*.db
+*.db-journal
+*.db-wal
+

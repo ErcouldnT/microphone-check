@@ -9,6 +9,7 @@ import '../global.css';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { initDb } from '@/db/client';
+import { syncService } from '@/services/syncService';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -31,7 +32,9 @@ export default function RootLayout() {
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
-    initDb().catch(e => console.error("DB Init Error:", e));
+    initDb()
+      .then(() => syncService.init())
+      .catch(e => console.error("Init Error:", e));
     if (error) throw error;
   }, [error]);
 

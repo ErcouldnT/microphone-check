@@ -4,9 +4,11 @@ import i18n from '@/i18n';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { eq } from 'drizzle-orm';
 import { useFocusEffect } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import PairingModal from './PairingModal';
+import { syncService, ConnectionStatus } from '@/services/syncService';
 
 // Use i18n for days
 const getDaysShort = () => i18n.t('daysShort') as unknown as string[];
@@ -14,6 +16,9 @@ const getDaysShort = () => i18n.t('daysShort') as unknown as string[];
 export default function CalendarView() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [sessionMap, setSessionMap] = useState<Record<string, number>>({});
+    const [pairingModalVisible, setPairingModalVisible] = useState(false);
+    const [syncStatus, setSyncStatus] = useState<ConnectionStatus>('local');
+    const [roomCode, setRoomCode] = useState<string | null>(null);
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -53,19 +58,50 @@ export default function CalendarView() {
     useFocusEffect(
         useCallback(() => {
             loadData();
+            setSyncStatus(syncService.getStatus());
+            setRoomCode(syncService.getRoomCode());
         }, [])
     );
+
+    useEffect(() => {
+        // Listen for remote real-time session updates
+        const unsubSession = syncService.addSessionListener(({ date, count }) => {
+            setSessionMap(prev => {
+                const next = { ...prev };
+                if (count <= 0) {
+                    delete next[date];
+                } else {
+                    next[date] = count;
+                }
+                calculateMonthStats(next, year, month);
+                return next;
+            });
+        });
+
+        // Listen for full sync events
+        const unsubSync = syncService.addSyncListener(() => {
+            loadData();
+            setRoomCode(syncService.getRoomCode());
+        });
+
+        // Listen for status changes
+        const unsubStatus = syncService.addStatusListener((newStatus) => {
+            setSyncStatus(newStatus);
+            setRoomCode(syncService.getRoomCode());
+        });
+
+        return () => {
+            unsubSession();
+            unsubSync();
+            unsubStatus();
+        };
+    }, [year, month]);
 
     const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
     const getFirstDayOfMonth = (y: number, m: number) => new Date(y, m, 1).getDay(); // 0-6 Sun-Sat
 
     const daysInMonth = getDaysInMonth(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
-
-    // Adjust for Monday start if desired (TR standard).
-    // 0(Sun) -> 6, 1(Mon) -> 0.
-    // let startOffset = firstDay === 0 ? 6 : firstDay - 1;
-    // keeping it simple (Sun start) for now or match headers.
 
     const handlePrevMonth = () => {
         const newDate = new Date(year, month - 1, 1);
@@ -83,42 +119,53 @@ export default function CalendarView() {
         try {
             // Find existing sessions for this date
             const existing = await db.select().from(sessions).where(eq(sessions.date, dayString));
+            let newCount = 0;
 
             if (existing.length > 0) {
-                // We have existing rows, consolidate them if multiple (legacy data fix) or update the first one
+                // We have existing rows, consolidate them if multiple or update first
                 const currentTotal = existing.reduce((acc, curr) => acc + curr.count, 0);
-                const newCount = currentTotal + change;
+                newCount = currentTotal + change;
 
                 if (newCount <= 0) {
-                    // Remove all entries for this date if count goes to 0 or below
+                    newCount = 0;
                     await db.delete(sessions).where(eq(sessions.date, dayString));
                 } else {
-                    // Update the first one to new total, delete others if any (cleanup)
                     const firstId = existing[0].id;
                     await db.update(sessions)
                         .set({ count: newCount })
                         .where(eq(sessions.id, firstId));
 
-                    // If there were duplicate rows (from old bugs), delete them
                     if (existing.length > 1) {
                         const itemsToDelete = existing.slice(1).map(x => x.id);
-                        // One by one delete or use 'inArray' if available, simple loop for now safe
                         for (const id of itemsToDelete) {
                             await db.delete(sessions).where(eq(sessions.id, id));
                         }
                     }
                 }
             } else {
-                // No existing session
                 if (change > 0) {
+                    newCount = change;
                     await db.insert(sessions).values({
                         date: dayString,
                         count: change
                     });
                 }
-                // If change is negative and no session exists, do nothing
             }
-            loadData();
+
+            // Optimistic UI update
+            setSessionMap(prev => {
+                const next = { ...prev };
+                if (newCount <= 0) {
+                    delete next[dayString];
+                } else {
+                    next[dayString] = newCount;
+                }
+                calculateMonthStats(next, year, month);
+                return next;
+            });
+
+            // Send real-time update via WebSocket to server
+            syncService.sendSessionUpdate(dayString, newCount);
         } catch (e) {
             console.error(e);
         }
@@ -162,9 +209,47 @@ export default function CalendarView() {
         return days;
     };
 
+    const getStatusIndicator = () => {
+        if (!roomCode) {
+            return (
+                <TouchableOpacity
+                    onPress={() => setPairingModalVisible(true)}
+                    className="flex-row items-center bg-gray-900 border border-gray-800 px-3 py-1 rounded-full"
+                >
+                    <FontAwesome name="users" size={12} color="#00FFFF" style={{ marginRight: 6 }} />
+                    <Text className="text-neonCyan text-xs font-bold">{i18n.t('pairWithFriend')}</Text>
+                </TouchableOpacity>
+            );
+        }
+
+        let dotColor = 'bg-gray-400';
+        if (syncStatus === 'connected') dotColor = 'bg-green-400';
+        else if (syncStatus === 'connecting') dotColor = 'bg-yellow-400';
+        else if (syncStatus === 'disconnected') dotColor = 'bg-red-400';
+
+        return (
+            <TouchableOpacity
+                onPress={() => setPairingModalVisible(true)}
+                className="flex-row items-center bg-gray-900 border border-neonCyan/40 px-3 py-1 rounded-full"
+            >
+                <View className={`w-2 h-2 rounded-full ${dotColor} mr-2`} />
+                <Text className="text-white text-xs font-bold tracking-wider mr-1">{roomCode}</Text>
+                <FontAwesome name="exchange" size={10} color="#00FFFF" />
+            </TouchableOpacity>
+        );
+    };
+
     return (
         <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
             <View className="p-4">
+                {/* Top Bar with Live Room Status */}
+                <View className="flex-row justify-between items-center mb-4">
+                    <Text className="text-white font-extrabold text-lg tracking-wider">
+                        MICROPHONE<Text className="text-neonCyan">CHECK</Text>
+                    </Text>
+                    {getStatusIndicator()}
+                </View>
+
                 {/* Header */}
                 <View className="flex-row justify-between items-center mb-6">
                     <TouchableOpacity onPress={handlePrevMonth} className="p-2">
@@ -208,6 +293,13 @@ export default function CalendarView() {
                     </View>
                 </View>
             </View>
+
+            {/* Pairing Modal */}
+            <PairingModal
+                visible={pairingModalVisible}
+                onClose={() => setPairingModalVisible(false)}
+            />
         </SafeAreaView>
     );
 }
+

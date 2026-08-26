@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  calendar-sync:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: microphone-calendar-sync
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - CORS_ORIGIN=*
+      - DATABASE_PATH=/data/calendar.db
+    volumes:
+      - calendar_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  calendar_data:
+    driver: local

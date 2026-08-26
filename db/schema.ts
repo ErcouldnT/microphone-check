@@ -6,3 +6,9 @@ export const sessions = sqliteTable("sessions", {
     count: integer("count").default(0).notNull(),
     createdAt: integer("created_at").$defaultFn(() => Date.now()),
 });
+
+export const settings = sqliteTable("settings", {
+    key: text("key").primaryKey(),
+    value: text("value").notNull(),
+});
+
