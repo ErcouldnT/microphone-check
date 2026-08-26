@@ -2,7 +2,9 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-// Configure how notifications appear when app is in foreground
+const DEFAULT_PROJECT_ID = '8b941571-081e-450a-8bf7-4001a1cfa69b';
+
+// Configure how notifications appear when app is in foreground or background
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -13,9 +15,27 @@ Notifications.setNotificationHandler({
   }),
 });
 
+export async function scheduleLocalNotification(title: string, body: string, data?: any) {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: 'default',
+        badge: 1,
+        data: data || {},
+      },
+      trigger: null, // deliver immediately
+    });
+  } catch (e: any) {
+    console.warn('Error scheduling local notification:', e.message);
+  }
+}
+
 class NotificationService {
   private static instance: NotificationService;
   private pushToken: string | null = null;
+  private permissionStatus: string = 'undetermined';
 
   public static getInstance(): NotificationService {
     if (!NotificationService.instance) {
@@ -32,6 +52,7 @@ class NotificationService {
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#00FFFF',
+          sound: 'default',
         });
       }
 
@@ -43,17 +64,20 @@ class NotificationService {
         finalStatus = status;
       }
 
+      this.permissionStatus = finalStatus;
+
       if (finalStatus !== 'granted') {
-        console.log('Notification permission not granted');
+        console.warn('Notification permission not granted, status:', finalStatus);
         return null;
       }
 
       const projectId =
         Constants?.expoConfig?.extra?.eas?.projectId ??
-        Constants?.easConfig?.projectId;
+        Constants?.easConfig?.projectId ??
+        DEFAULT_PROJECT_ID;
 
       const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId: projectId || undefined,
+        projectId,
       }).catch(err => {
         console.warn('Could not get expo push token:', err.message);
         return null;
@@ -61,7 +85,7 @@ class NotificationService {
 
       if (tokenData?.data) {
         this.pushToken = tokenData.data;
-        console.log('Registered Push Token:', this.pushToken);
+        console.log('✅ Registered Push Token:', this.pushToken);
         return this.pushToken;
       }
 
@@ -76,6 +100,10 @@ class NotificationService {
     return this.pushToken;
   }
 
+  public getPermissionStatus(): string {
+    return this.permissionStatus;
+  }
+
   public async sendTokenToServer(serverUrl: string, roomCode: string, deviceId: string): Promise<void> {
     try {
       let token = this.pushToken;
@@ -83,10 +111,13 @@ class NotificationService {
         token = await this.registerForPushNotificationsAsync();
       }
 
-      if (!token || !roomCode) return;
+      if (!token || !roomCode) {
+        console.log('Cannot send token to server: token or roomCode missing');
+        return;
+      }
 
       const cleanUrl = serverUrl.trim().replace(/\/+$/, '');
-      await fetch(`${cleanUrl}/api/rooms/${encodeURIComponent(roomCode)}/register-push-token`, {
+      const res = await fetch(`${cleanUrl}/api/rooms/${encodeURIComponent(roomCode)}/register-push-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -95,7 +126,9 @@ class NotificationService {
           platform: Platform.OS,
         }),
       });
-      console.log('Push token successfully registered with server for room', roomCode);
+
+      const resData = await res.json();
+      console.log('✅ Push token registered on server response:', resData);
     } catch (err: any) {
       console.warn('Failed to send push token to server:', err.message);
     }

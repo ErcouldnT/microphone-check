@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { setNoteByDate, getAllNotes } from '@/db/notes';
 import { CalendarEvent, getAllEvents, saveEvent, deleteEvent, bulkSetEvents } from '@/db/events';
 import { RelationshipCounter, getAllCounters, saveCounter, deleteCounter, bulkSetCounters } from '@/db/counters';
-import { notificationService } from './notificationService';
+import { notificationService, scheduleLocalNotification } from './notificationService';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'local';
 
@@ -288,6 +288,7 @@ class SyncService {
       timestamp: Date.now()
     };
     this.notificationListeners.forEach(listener => listener(payload));
+    scheduleLocalNotification(title, message, { type });
   }
 
   private async handleWsMessage(msg: any) {

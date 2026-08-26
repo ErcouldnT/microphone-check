@@ -11,6 +11,8 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { initDb } from '@/db/client';
 import { syncService } from '@/services/syncService';
 
+import { notificationService } from '@/services/notificationService';
+
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary
@@ -34,6 +36,7 @@ export default function RootLayout() {
   useEffect(() => {
     initDb()
       .then(() => syncService.init())
+      .then(() => notificationService.registerForPushNotificationsAsync())
       .catch(e => console.error("Init Error:", e));
     if (error) throw error;
   }, [error]);

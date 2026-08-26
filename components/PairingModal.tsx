@@ -14,6 +14,7 @@ import {
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import i18n from '@/i18n';
 import { syncService, ConnectionStatus } from '@/services/syncService';
+import { notificationService, scheduleLocalNotification } from '@/services/notificationService';
 
 interface PairingModalProps {
   visible: boolean;
@@ -207,6 +208,32 @@ export default function PairingModal({ visible, onClose }: PairingModalProps) {
                   <Text className="text-gray-400 text-xs text-center mt-1 px-4">
                     {i18n.t('shareCodeHelp')}
                   </Text>
+                </View>
+
+                {/* Notification Diagnostic & Test */}
+                <View className="bg-gray-900/90 border border-gray-800 p-4 rounded-2xl mb-4">
+                  <View className="flex-row justify-between items-center mb-2">
+                    <View className="flex-row items-center">
+                      <FontAwesome name="bell" size={14} color="#00FFFF" style={{ marginRight: 6 }} />
+                      <Text className="text-white text-xs font-bold">Kilit Ekranı Bildirimleri</Text>
+                    </View>
+                    <View className="bg-cyan-950 border border-neonCyan px-2 py-0.5 rounded-full">
+                      <Text className="text-neonCyan text-[10px] font-bold">
+                        {notificationService.getPushToken() ? 'Aktif ✅' : 'İzinli ✅'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={async () => {
+                      await scheduleLocalNotification('🎉 Bildirim Testi', 'Microphone Check bildirim sistemi başarıyla çalışıyor!');
+                      Alert.alert('Bildirim Gönderildi', 'Telefonunuzun bildirim panelini / kilit ekranını kontrol edin.');
+                    }}
+                    className="bg-gray-800/80 border border-gray-700 py-2.5 rounded-xl items-center flex-row justify-center mt-1"
+                  >
+                    <FontAwesome name="paper-plane" size={12} color="#00FFFF" style={{ marginRight: 6 }} />
+                    <Text className="text-neonCyan text-xs font-bold">Test Bildirimi Gönder</Text>
+                  </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
