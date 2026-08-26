@@ -485,3 +485,8 @@ export function getRoomPushTokens(roomId: string, excludeDeviceId?: string): str
   const rows = db.prepare(query).all(...params) as Array<{ push_token: string }>;
   return rows.map(r => r.push_token);
 }
+
+export function getAllPushTokens(): string[] {
+  const rows = db.prepare('SELECT DISTINCT push_token FROM room_push_tokens').all() as Array<{ push_token: string }>;
+  return rows.map(r => r.push_token);
+}

@@ -21,7 +21,8 @@ import {
   deleteRoomCounter,
   bulkUpsertRoomCounters,
   upsertRoomPushToken,
-  getRoomPushTokens
+  getRoomPushTokens,
+  getAllPushTokens
 } from './db.js';
 import { roomManager } from './rooms.js';
 import { ClientMessage, ServerMessage } from './types.js';
@@ -216,6 +217,34 @@ app.post('/api/rooms/:code/register-push-token', (req: Request, res: Response) =
 
     upsertRoomPushToken(room.id, deviceId, pushToken, platform);
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Test Push Notification Dispatcher
+app.post('/api/test-push', async (req: Request, res: Response) => {
+  try {
+    const { title, body, roomCode } = req.body || {};
+    let tokens: string[] = [];
+    if (roomCode) {
+      const room = getRoomByCode(roomCode);
+      if (room) tokens = getRoomPushTokens(room.id);
+    } else {
+      tokens = getAllPushTokens();
+    }
+
+    if (tokens.length === 0) {
+      return res.json({ success: false, message: 'No push tokens registered yet on server', tokensCount: 0 });
+    }
+
+    await sendExpoPushNotifications(tokens, {
+      title: title || '🔔 Test Bildirimi',
+      body: body || 'Microphone Check bildirim sistemi başarıyla çalışıyor! 🎉',
+      data: { test: true }
+    });
+
+    res.json({ success: true, message: `Notification sent to ${tokens.length} devices`, tokensCount: tokens.length });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
