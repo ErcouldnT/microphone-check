@@ -19,10 +19,13 @@ import {
   getRoomCounters,
   upsertRoomCounter,
   deleteRoomCounter,
-  bulkUpsertRoomCounters
+  bulkUpsertRoomCounters,
+  upsertRoomPushToken,
+  getRoomPushTokens
 } from './db.js';
 import { roomManager } from './rooms.js';
 import { ClientMessage, ServerMessage } from './types.js';
+import { sendExpoPushNotifications } from './push.js';
 
 // Initialize Database
 initDb();
@@ -196,6 +199,28 @@ app.post('/api/rooms/:code/push-all', (req: Request, res: Response) => {
   }
 });
 
+// 5. Register Push Notification Token
+app.post('/api/rooms/:code/register-push-token', (req: Request, res: Response) => {
+  try {
+    const { code } = req.params;
+    const { deviceId, pushToken, platform } = req.body;
+
+    if (!deviceId || !pushToken) {
+      return res.status(400).json({ success: false, error: 'Missing deviceId or pushToken' });
+    }
+
+    const room = getRoomByCode(code);
+    if (!room) {
+      return res.status(404).json({ success: false, error: 'Room not found' });
+    }
+
+    upsertRoomPushToken(room.id, deviceId, pushToken, platform);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Create HTTP server
 const server = http.createServer(app);
 
@@ -320,6 +345,14 @@ wss.on('connection', (ws: WebSocket, req) => {
           timestamp: Date.now()
         };
         roomManager.broadcastToRoom(room.code, noteMsg, ws);
+
+        // Send push notification to devices in room that are in background/closed
+        const pushTokens = getRoomPushTokens(room.id, msg.author);
+        sendExpoPushNotifications(pushTokens, {
+          title: '📝 Günlük Not Güncellendi',
+          body: `${msg.date} için not güncellendi: "${msg.content.substring(0, 50)}"`,
+          data: { roomCode: room.code, date: msg.date }
+        });
         return;
       }
 
@@ -340,6 +373,14 @@ wss.on('connection', (ws: WebSocket, req) => {
           timestamp: Date.now()
         };
         roomManager.broadcastToRoom(room.code, eventMsg, ws);
+
+        // Send push notification to devices in room that are in background/closed
+        const pushTokens = getRoomPushTokens(room.id, msg.author);
+        sendExpoPushNotifications(pushTokens, {
+          title: '📅 Yeni Plan Eklendi',
+          body: `Partnerin "${msg.event.title}" planını ekledi (${msg.event.startDate})`,
+          data: { roomCode: room.code, eventId: msg.event.id, date: msg.event.startDate }
+        });
         return;
       }
 
@@ -360,6 +401,14 @@ wss.on('connection', (ws: WebSocket, req) => {
           timestamp: Date.now()
         };
         roomManager.broadcastToRoom(room.code, delMsg, ws);
+
+        // Send push notification to devices in room that are in background/closed
+        const pushTokens = getRoomPushTokens(room.id, msg.author);
+        sendExpoPushNotifications(pushTokens, {
+          title: '🗑️ Plan Silindi',
+          body: 'Takvimden bir etkinlik kaldırıldı.',
+          data: { roomCode: room.code }
+        });
         return;
       }
 

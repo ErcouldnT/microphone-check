@@ -76,10 +76,22 @@ export function initDb() {
       FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS room_push_tokens (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      push_token TEXT NOT NULL,
+      platform TEXT,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+      UNIQUE(room_id, device_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_entries_room_date ON calendar_entries(room_id, date);
     CREATE INDEX IF NOT EXISTS idx_notes_room_date ON room_notes(room_id, date);
     CREATE INDEX IF NOT EXISTS idx_events_room ON room_events(room_id);
     CREATE INDEX IF NOT EXISTS idx_counters_room ON room_counters(room_id);
+    CREATE INDEX IF NOT EXISTS idx_push_room ON room_push_tokens(room_id);
     CREATE INDEX IF NOT EXISTS idx_rooms_code ON rooms(code);
   `);
 }
@@ -444,4 +456,32 @@ export function bulkUpsertRoomCounters(roomId: string, counters: RelationshipCou
   });
 
   transaction(counters);
+}
+
+// Push Notifications
+export function upsertRoomPushToken(roomId: string, deviceId: string, pushToken: string, platform?: string) {
+  const now = Date.now();
+  const id = crypto.randomUUID();
+  const stmt = db.prepare(`
+    INSERT INTO room_push_tokens (id, room_id, device_id, push_token, platform, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(room_id, device_id) DO UPDATE SET
+      push_token = excluded.push_token,
+      platform = excluded.platform,
+      updated_at = excluded.updated_at
+  `);
+  stmt.run(id, roomId, deviceId, pushToken, platform || null, now);
+}
+
+export function getRoomPushTokens(roomId: string, excludeDeviceId?: string): string[] {
+  let query = 'SELECT push_token FROM room_push_tokens WHERE room_id = ?';
+  const params: any[] = [roomId];
+
+  if (excludeDeviceId) {
+    query += ' AND device_id != ?';
+    params.push(excludeDeviceId);
+  }
+
+  const rows = db.prepare(query).all(...params) as Array<{ push_token: string }>;
+  return rows.map(r => r.push_token);
 }

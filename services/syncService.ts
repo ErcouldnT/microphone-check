@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { setNoteByDate, getAllNotes } from '@/db/notes';
 import { CalendarEvent, getAllEvents, saveEvent, deleteEvent, bulkSetEvents } from '@/db/events';
 import { RelationshipCounter, getAllCounters, saveCounter, deleteCounter, bulkSetCounters } from '@/db/counters';
+import { notificationService } from './notificationService';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'local';
 
@@ -198,6 +199,9 @@ class SyncService {
 
         // Sync with REST endpoint
         this.syncWithServer();
+
+        // Register Push Notification Token for closed-app notifications
+        notificationService.sendTokenToServer(this.serverUrl, this.roomCode!, this.deviceId);
       };
 
       this.ws.onmessage = async (event) => {
