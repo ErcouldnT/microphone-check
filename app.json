@@ -23,7 +23,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.ercode.microphonecheck"
+      "package": "com.ercode.microphonecheck",
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",
