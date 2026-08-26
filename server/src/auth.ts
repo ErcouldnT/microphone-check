@@ -5,26 +5,16 @@ function cleanKey(k?: string | null): string {
   return k.trim().replace(/^["']|["']$/g, '');
 }
 
-function getValidKeySet(): Set<string> {
-  const set = new Set<string>([
-    'erkut-api-key',
-    'mc_sec_2026_couple_prod',
-  ]);
-
-  if (process.env.API_KEY) {
-    const cleaned = cleanKey(process.env.API_KEY);
-    if (cleaned) {
-      set.add(cleaned.toLowerCase());
-      set.add(cleaned);
-    }
-  }
-
-  return set;
-}
-
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
   // Allow healthcheck root endpoint
   if (req.path === '/' || req.path === '/health') {
+    return next();
+  }
+
+  const expectedKey = cleanKey(process.env.API_KEY);
+
+  // If no API_KEY is set in environment, allow open access
+  if (!expectedKey) {
     return next();
   }
 
@@ -37,27 +27,25 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     : null;
 
   const rawProvidedKey = (apiKeyHeader || bearerToken || queryApiKey) as string;
-  const cleanedProvidedKey = cleanKey(rawProvidedKey);
+  const providedKey = cleanKey(rawProvidedKey);
 
-  const validKeys = getValidKeySet();
-
-  if (cleanedProvidedKey && (validKeys.has(cleanedProvidedKey.toLowerCase()) || validKeys.has(cleanedProvidedKey))) {
-    return next();
-  }
-
-  // If no API_KEY configured on server and no matching key
-  if (!process.env.API_KEY && (!rawProvidedKey || cleanedProvidedKey === '')) {
+  if (providedKey && providedKey === expectedKey) {
     return next();
   }
 
   return res.status(401).json({
     success: false,
-    error: 'Unauthorized: Invalid or missing API Key. Provide via X-API-Key header or apiKey query parameter.'
+    error: 'Unauthorized: Invalid or missing API Key. Provide via X-API-Key header.'
   });
 }
 
 export function validateWsAuth(reqUrl: string, reqHeaders: Record<string, string | string[] | undefined>): boolean {
-  const validKeys = getValidKeySet();
+  const expectedKey = cleanKey(process.env.API_KEY);
+
+  // If no API_KEY configured on server, allow
+  if (!expectedKey) {
+    return true;
+  }
 
   try {
     const url = new URL(reqUrl, 'http://localhost');
@@ -65,17 +53,9 @@ export function validateWsAuth(reqUrl: string, reqHeaders: Record<string, string
     const headerKey = (reqHeaders['x-api-key'] || reqHeaders['X-API-KEY'] || reqHeaders['x-api-token']) as string;
 
     const rawKey = queryKey || headerKey;
-    const cleaned = cleanKey(rawKey);
+    const providedKey = cleanKey(rawKey);
 
-    if (cleaned && (validKeys.has(cleaned.toLowerCase()) || validKeys.has(cleaned))) {
-      return true;
-    }
-
-    if (!process.env.API_KEY && !rawKey) {
-      return true;
-    }
-
-    return false;
+    return Boolean(providedKey && providedKey === expectedKey);
   } catch {
     return false;
   }
