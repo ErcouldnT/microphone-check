@@ -42,12 +42,17 @@ export default function RootLayout() {
   useEffect(() => {
     initDb()
       .then(() => syncService.init())
-      .then(() => notificationService.registerForPushNotificationsAsync())
       .then(() => setAppReady(true))
       .catch(e => {
         console.error("Init Error:", e);
         setAppReady(true);
       });
+
+    // Registering for push talks to FCM/APNs and can take tens of seconds (or
+    // hang) when the service is unreachable, so it must not gate first paint.
+    notificationService
+      .registerForPushNotificationsAsync()
+      .catch(e => console.warn("Push registration failed:", e?.message));
     if (error) throw error;
   }, [error]);
 
@@ -81,7 +86,6 @@ function RootLayoutNav() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>
   );

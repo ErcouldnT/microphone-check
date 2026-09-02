@@ -2,11 +2,11 @@
   "expo": {
     "name": "Microphone Check",
     "slug": "microphone-check",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "microphonecheck",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash.png",
@@ -15,7 +15,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ercode.microphonecheck"
+      "bundleIdentifier": "com.ercode.microphonecheck",
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.ercode.microphonecheck"
+        ]
+      },
+      "appleTeamId": "5QWR5WX9N7",
+      "userInterfaceStyle": "dark"
     },
     "android": {
       "adaptiveIcon": {
@@ -25,8 +32,9 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.ercode.microphonecheck",
-      "versionCode": 5,
-      "googleServicesFile": "./google-services.json"
+      "versionCode": 6,
+      "googleServicesFile": "./google-services.json",
+      "userInterfaceStyle": "dark"
     },
     "web": {
       "bundler": "metro",
@@ -42,7 +50,9 @@
           "icon": "./assets/images/icon.png",
           "color": "#00FFFF"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true
