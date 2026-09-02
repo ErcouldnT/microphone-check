@@ -1,0 +1,5 @@
+<resources>
+  <string name="widget_today_plan_title">BUGÜNÜN PLANI</string>
+  <string name="widget_no_plan_today">Bugün için plan yok.</string>
+  <string name="widget_description">Bugünden geriye kalan planlar.</string>
+</resources>

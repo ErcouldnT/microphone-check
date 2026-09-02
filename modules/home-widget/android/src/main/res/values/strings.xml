@@ -1,0 +1,5 @@
+<resources>
+  <string name="widget_today_plan_title">TODAY\'S PLAN</string>
+  <string name="widget_no_plan_today">Nothing planned for today.</string>
+  <string name="widget_description">What is still planned for today.</string>
+</resources>

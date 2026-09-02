@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Home screen widget showing what is still planned for today. -->
+    <receiver
+      android:name="expo.modules.homewidget.TodayPlanWidgetProvider"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/today_plan_widget_info" />
+    </receiver>
+  </application>
+</manifest>
