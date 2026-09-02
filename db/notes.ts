@@ -18,7 +18,10 @@ export const generateNoteId = (): string =>
 
 type NoteRow = {
   id: number;
-  noteId: string;
+  // Nullable in the schema so the column could be added to existing databases;
+  // every write path supplies one, and rows that predate it fall back to the
+  // local row id.
+  noteId: string | null;
   date: string;
   content: string;
   createdAt: number | null;
@@ -27,7 +30,7 @@ type NoteRow = {
 
 const toNoteItem = (n: NoteRow): NoteItem => ({
   id: n.id,
-  noteId: n.noteId,
+  noteId: n.noteId ?? `local_${n.id}`,
   date: n.date,
   content: n.content,
   createdAt: n.createdAt ?? undefined,

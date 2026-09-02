@@ -16,7 +16,7 @@ export const settings = sqliteTable("settings", {
 // cross-device sync; the autoincrement `id` stays local to this device.
 export const notes = sqliteTable("notes", {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    noteId: text("note_id").notNull().unique(),
+    noteId: text("note_id").unique(),
     date: text("date").notNull(), // ISO Date String YYYY-MM-DD
     content: text("content").notNull(),
     createdAt: integer("created_at").$defaultFn(() => Date.now()),
@@ -34,7 +34,7 @@ export const events = sqliteTable("events", {
     isAllDay: integer("is_all_day").default(1).notNull(),
     color: text("color").notNull(),          // Hex code e.g. #00FFFF, #FF007F, #FACC15
     target: text("target").notNull(),        // 'you', 'partner', 'both'
-    completed: integer("completed").default(0).notNull(), // 0 = pending, 1 = done
+    completed: integer("completed").default(0), // 0 = pending, 1 = done
     author: text("author"),
     createdAt: integer("created_at").$defaultFn(() => Date.now()),
     updatedAt: integer("updated_at").$defaultFn(() => Date.now()),

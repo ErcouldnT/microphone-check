@@ -1,0 +1,11 @@
+{
+  "type": "widget",
+  "name": "TodayPlanWidget",
+  "entitlements": {
+    "com.apple.security.application-groups": ["group.com.ercode.microphonecheck"]
+  },
+  "colors": {
+    "$accent": "#00FFFF",
+    "$widgetBackground": "#0B0B10"
+  }
+}
