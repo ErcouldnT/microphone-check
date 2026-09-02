@@ -11,6 +11,7 @@ import {
   bulkUpsertCalendarEntries,
   getRoomNotes,
   upsertRoomNote,
+  deleteRoomNote,
   bulkUpsertRoomNotes,
   getRoomEvents,
   upsertRoomEvent,
@@ -166,7 +167,7 @@ app.post('/api/rooms/:code/push-all', (req: Request, res: Response) => {
     if (Array.isArray(notes) && notes.length > 0) {
       bulkUpsertRoomNotes(
         room.id,
-        notes.map((n: any) => ({ date: n.date, content: n.content, updatedBy: author }))
+        notes.map((n: any) => ({ noteId: n.noteId, date: n.date, content: n.content, updatedBy: author }))
       );
     }
 
@@ -418,10 +419,13 @@ wss.on('connection', (ws: WebSocket, req) => {
         const room = getRoomByCode(roomCode);
         if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
 
-        upsertRoomNote(room.id, msg.date, msg.content, msg.author);
+        // Clients older than v3.1 omit noteId and keep one note per day.
+        const noteId = msg.noteId || `legacy_${msg.date}`;
+        upsertRoomNote(room.id, noteId, msg.date, msg.content, msg.author);
 
         const noteMsg: ServerMessage = {
           type: 'NOTE_UPDATED',
+          noteId,
           date: msg.date,
           content: msg.content,
           author: msg.author,
@@ -435,8 +439,29 @@ wss.on('connection', (ws: WebSocket, req) => {
         sendExpoPushNotifications(pushTokens, {
           title: '📝 Günlük Not Güncellendi',
           body: `${msg.date} için not güncellendi: "${msg.content.substring(0, 50)}"`,
-          data: { roomCode: room.code, date: msg.date }
+          data: { roomCode: room.code, date: msg.date, noteId }
         });
+        return;
+      }
+
+      if (msg.type === 'DELETE_NOTE') {
+        const client = roomManager.getClient(ws);
+        const roomCode = msg.roomCode || client?.roomCode;
+        if (!roomCode) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Not in room' }));
+
+        const room = getRoomByCode(roomCode);
+        if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
+
+        deleteRoomNote(room.id, msg.noteId);
+
+        const delNoteMsg: ServerMessage = {
+          type: 'NOTE_DELETED',
+          noteId: msg.noteId,
+          date: msg.date,
+          author: msg.author,
+          timestamp: Date.now()
+        };
+        roomManager.broadcastToRoom(room.code, delNoteMsg, ws);
         return;
       }
 
@@ -447,6 +472,11 @@ wss.on('connection', (ws: WebSocket, req) => {
 
         const room = getRoomByCode(roomCode);
         if (!room) return ws.send(JSON.stringify({ type: 'ERROR', message: 'Room not found' }));
+
+        const previous = getRoomEvents(room.id).find(e => e.id === msg.event.id);
+        const isNew = !previous;
+        const completionChanged =
+          !isNew && Boolean(previous!.completed) !== Boolean(msg.event.completed);
 
         const saved = upsertRoomEvent(room.id, msg.event, msg.author);
 
@@ -461,9 +491,20 @@ wss.on('connection', (ws: WebSocket, req) => {
         // Send push notification to devices in room that are in background/closed (excluding sender)
         const senderDevice = msg.author || client?.deviceId;
         const pushTokens = getRoomPushTokens(room.id, senderDevice, (msg as any).senderToken);
+
+        const pushBody = completionChanged
+          ? (msg.event.completed
+              ? `Partnerin "${msg.event.title}" planını tamamladı ✅`
+              : `Partnerin "${msg.event.title}" planını tamamlanmadı olarak işaretledi`)
+          : isNew
+            ? `Partnerin "${msg.event.title}" planını ekledi (${msg.event.startDate})`
+            : `Partnerin "${msg.event.title}" planını güncelledi (${msg.event.startDate})`;
+
         sendExpoPushNotifications(pushTokens, {
-          title: '📅 Yeni Plan Eklendi',
-          body: `Partnerin "${msg.event.title}" planını ekledi (${msg.event.startDate})`,
+          title: completionChanged
+            ? (msg.event.completed ? '✅ Plan Tamamlandı' : '↩️ Plan Geri Alındı')
+            : isNew ? '📅 Yeni Plan Eklendi' : '📅 Plan Güncellendi',
+          body: pushBody,
           data: { roomCode: room.code, eventId: msg.event.id, date: msg.event.startDate }
         });
         return;

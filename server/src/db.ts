@@ -40,12 +40,13 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS room_notes (
       id TEXT PRIMARY KEY,
       room_id TEXT NOT NULL,
+      note_id TEXT NOT NULL,
       date TEXT NOT NULL,
       content TEXT NOT NULL,
       updated_at INTEGER NOT NULL,
       updated_by TEXT,
       FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
-      UNIQUE(room_id, date)
+      UNIQUE(room_id, note_id)
     );
 
     CREATE TABLE IF NOT EXISTS room_events (
@@ -60,6 +61,7 @@ export function initDb() {
       is_all_day INTEGER DEFAULT 1,
       color TEXT NOT NULL,
       target TEXT NOT NULL,
+      completed INTEGER NOT NULL DEFAULT 0,
       author TEXT,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
@@ -94,6 +96,62 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_push_room ON room_push_tokens(room_id);
     CREATE INDEX IF NOT EXISTS idx_rooms_code ON rooms(code);
   `);
+
+  runV31Migrations();
+}
+
+function tableColumns(table: string): string[] {
+  try {
+    const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    return rows.map(r => r.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * v3.1 schema upgrades:
+ *  - a day may hold several notes, so `room_notes` moves from UNIQUE(room_id, date)
+ *    to UNIQUE(room_id, note_id). SQLite cannot drop a constraint in place, so the
+ *    table is rebuilt with the existing rows carried over.
+ *  - events gain a `completed` flag.
+ */
+function runV31Migrations() {
+  const noteColumns = tableColumns('room_notes');
+  if (noteColumns.length > 0 && !noteColumns.includes('note_id')) {
+    db.exec(`
+      PRAGMA foreign_keys=off;
+      BEGIN TRANSACTION;
+      ALTER TABLE room_notes RENAME TO room_notes_legacy_v3;
+      CREATE TABLE room_notes (
+        id TEXT PRIMARY KEY,
+        room_id TEXT NOT NULL,
+        note_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        content TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        updated_by TEXT,
+        FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+        UNIQUE(room_id, note_id)
+      );
+      INSERT INTO room_notes (id, room_id, note_id, date, content, updated_at, updated_by)
+        SELECT id, room_id, 'legacy_' || date, date, content, updated_at, updated_by
+        FROM room_notes_legacy_v3
+        WHERE content IS NOT NULL AND trim(content) != '';
+      DROP TABLE room_notes_legacy_v3;
+      COMMIT;
+      PRAGMA foreign_keys=on;
+    `);
+    console.log('[migration] room_notes rebuilt for multi-note-per-day support');
+  }
+
+  const eventColumns = tableColumns('room_events');
+  if (eventColumns.length > 0 && !eventColumns.includes('completed')) {
+    db.exec(`ALTER TABLE room_events ADD COLUMN completed INTEGER NOT NULL DEFAULT 0;`);
+    console.log('[migration] room_events.completed added');
+  }
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_room_note ON room_notes(room_id, note_id);`);
 }
 
 // Generate friendly 6-digit room code like MIC-8492
@@ -209,61 +267,78 @@ export function bulkUpsertCalendarEntries(roomId: string, entries: Array<{ date:
 // Calendar Notes
 export function getRoomNotes(roomId: string): CalendarNote[] {
   const stmt = db.prepare(`
-    SELECT id, room_id as roomId, date, content, updated_at as updatedAt, updated_by as updatedBy
+    SELECT id, room_id as roomId, note_id as noteId, date, content,
+           updated_at as updatedAt, updated_by as updatedBy
     FROM room_notes
     WHERE room_id = ?
-    ORDER BY date ASC
+    ORDER BY date ASC, updated_at ASC
   `);
   return stmt.all(roomId) as CalendarNote[];
 }
 
-export function upsertRoomNote(roomId: string, date: string, content: string, updatedBy?: string): CalendarNote {
+export function upsertRoomNote(
+  roomId: string,
+  noteId: string,
+  date: string,
+  content: string,
+  updatedBy?: string
+): CalendarNote {
   const now = Date.now();
   touchRoom(roomId);
 
   const trimmed = content.trim();
   if (!trimmed) {
-    const deleteStmt = db.prepare('DELETE FROM room_notes WHERE room_id = ? AND date = ?');
-    deleteStmt.run(roomId, date);
-    return { roomId, date, content: '', updatedAt: now, updatedBy };
+    db.prepare('DELETE FROM room_notes WHERE room_id = ? AND note_id = ?').run(roomId, noteId);
+    return { roomId, noteId, date, content: '', updatedAt: now, updatedBy };
   }
 
   const id = crypto.randomUUID();
   const upsertStmt = db.prepare(`
-    INSERT INTO room_notes (id, room_id, date, content, updated_at, updated_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(room_id, date) DO UPDATE SET
+    INSERT INTO room_notes (id, room_id, note_id, date, content, updated_at, updated_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(room_id, note_id) DO UPDATE SET
+      date = excluded.date,
       content = excluded.content,
       updated_at = excluded.updated_at,
       updated_by = excluded.updated_by
   `);
-  upsertStmt.run(id, roomId, date, trimmed, now, updatedBy || null);
+  upsertStmt.run(id, roomId, noteId, date, trimmed, now, updatedBy || null);
 
-  return { id, roomId, date, content: trimmed, updatedAt: now, updatedBy };
+  return { id, roomId, noteId, date, content: trimmed, updatedAt: now, updatedBy };
 }
 
-export function bulkUpsertRoomNotes(roomId: string, notes: Array<{ date: string; content: string; updatedBy?: string }>) {
+export function deleteRoomNote(roomId: string, noteId: string) {
+  touchRoom(roomId);
+  db.prepare('DELETE FROM room_notes WHERE room_id = ? AND note_id = ?').run(roomId, noteId);
+}
+
+type IncomingNote = { noteId?: string; date: string; content: string; updatedBy?: string };
+
+export function bulkUpsertRoomNotes(roomId: string, notes: IncomingNote[]) {
   const now = Date.now();
   touchRoom(roomId);
 
   const insertStmt = db.prepare(`
-    INSERT INTO room_notes (id, room_id, date, content, updated_at, updated_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(room_id, date) DO UPDATE SET
+    INSERT INTO room_notes (id, room_id, note_id, date, content, updated_at, updated_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(room_id, note_id) DO UPDATE SET
+      date = excluded.date,
       content = excluded.content,
       updated_at = excluded.updated_at,
       updated_by = excluded.updated_by
   `);
 
-  const deleteStmt = db.prepare('DELETE FROM room_notes WHERE room_id = ? AND date = ?');
+  const deleteStmt = db.prepare('DELETE FROM room_notes WHERE room_id = ? AND note_id = ?');
 
-  const transaction = db.transaction((items: Array<{ date: string; content: string; updatedBy?: string }>) => {
+  const transaction = db.transaction((items: IncomingNote[]) => {
     for (const item of items) {
+      // Clients older than v3.1 send date-keyed notes with no id.
+      const noteId = item.noteId || `legacy_${item.date}`;
       const trimmed = item.content?.trim();
       if (!trimmed) {
-        deleteStmt.run(roomId, item.date);
+        deleteStmt.run(roomId, noteId);
       } else {
-        insertStmt.run(crypto.randomUUID(), roomId, item.date, trimmed, now, item.updatedBy || null);
+        insertStmt.run(crypto.randomUUID(), roomId, noteId, item.date, trimmed, now, item.updatedBy || null);
       }
     }
   });
@@ -276,7 +351,7 @@ export function getRoomEvents(roomId: string): CalendarEvent[] {
   const stmt = db.prepare(`
     SELECT id, room_id as roomId, title, description, start_date as startDate, end_date as endDate,
            start_time as startTime, end_time as endTime, is_all_day as isAllDay, color, target,
-           author, updated_at as updatedAt
+           completed, author, updated_at as updatedAt
     FROM room_events
     WHERE room_id = ?
     ORDER BY start_date ASC, start_time ASC
@@ -294,6 +369,7 @@ export function getRoomEvents(roomId: string): CalendarEvent[] {
     isAllDay: Boolean(r.isAllDay),
     color: r.color,
     target: r.target,
+    completed: Boolean(r.completed),
     author: r.author || undefined,
     updatedAt: r.updatedAt,
   }));
@@ -304,8 +380,8 @@ export function upsertRoomEvent(roomId: string, event: CalendarEvent, author?: s
   touchRoom(roomId);
 
   const stmt = db.prepare(`
-    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, author, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, completed, author, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       description = excluded.description,
@@ -316,6 +392,7 @@ export function upsertRoomEvent(roomId: string, event: CalendarEvent, author?: s
       is_all_day = excluded.is_all_day,
       color = excluded.color,
       target = excluded.target,
+      completed = excluded.completed,
       author = excluded.author,
       updated_at = excluded.updated_at
   `);
@@ -332,6 +409,7 @@ export function upsertRoomEvent(roomId: string, event: CalendarEvent, author?: s
     event.isAllDay ? 1 : 0,
     event.color,
     event.target,
+    event.completed ? 1 : 0,
     author || event.author || null,
     now
   );
@@ -350,8 +428,8 @@ export function bulkUpsertRoomEvents(roomId: string, events: CalendarEvent[]) {
   touchRoom(roomId);
 
   const stmt = db.prepare(`
-    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, author, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, completed, author, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       description = excluded.description,
@@ -362,6 +440,7 @@ export function bulkUpsertRoomEvents(roomId: string, events: CalendarEvent[]) {
       is_all_day = excluded.is_all_day,
       color = excluded.color,
       target = excluded.target,
+      completed = excluded.completed,
       author = excluded.author,
       updated_at = excluded.updated_at
   `);
@@ -380,6 +459,7 @@ export function bulkUpsertRoomEvents(roomId: string, events: CalendarEvent[]) {
         e.isAllDay ? 1 : 0,
         e.color,
         e.target,
+        e.completed ? 1 : 0,
         e.author || null,
         now
       );
