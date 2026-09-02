@@ -5,7 +5,9 @@ import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
 import { RelationshipCounter, getCountersForDate, getDaysDifference } from '@/db/counters';
 import { UserRole } from '@/db/settings';
-import { getLocalDateString, parseLocalDate } from '@/utils/date';
+import { NoteItem } from '@/db/notes';
+import { getLocalDateString } from '@/utils/date';
+import EventCompletionToggle, { CompletedBadge } from './EventCompletionToggle';
 
 interface DayViewProps {
   currentDate: Date;
@@ -18,15 +20,13 @@ interface DayViewProps {
   partnerName?: string;
   onAddEvent: (dateStr: string, time?: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
-  dailyNote?: string;
+  onToggleCompleted?: (event: CalendarEvent) => void;
+  dayNotes?: NoteItem[];
   onEditNote?: (dateStr: string) => void;
 }
 
-const HOURS = [
-  '08:00', '09:00', '10:00', '11:00', '12:00', '13:00',
-  '14:00', '15:00', '16:00', '17:00', '18:00', '19:00',
-  '20:00', '21:00', '22:00', '23:00'
-];
+/** Every hour of the day, 00:00 through 23:00 (the last row covers 23:59). */
+const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
 
 export default function DayView({
   currentDate,
@@ -39,7 +39,8 @@ export default function DayView({
   partnerName = '',
   onAddEvent,
   onEditEvent,
-  dailyNote,
+  onToggleCompleted,
+  dayNotes = [],
   onEditNote,
 }: DayViewProps) {
   const dateStr = getLocalDateString(currentDate);
@@ -142,21 +143,29 @@ export default function DayView({
           </View>
         )}
 
-        {/* Daily Note Banner */}
-        {dailyNote ? (
-          <TouchableOpacity
-            onPress={() => onEditNote && onEditNote(dateStr)}
-            className="bg-purple-950/50 border border-purple-800/60 p-3.5 rounded-2xl mb-4 flex-row items-center justify-between"
-          >
-            <View className="flex-row items-center flex-1 mr-2">
-              <FontAwesome name="pencil-square" size={16} color="#c084fc" style={{ marginRight: 8 }} />
-              <Text className="text-purple-200 text-xs flex-1" numberOfLines={2}>
-                {dailyNote}
-              </Text>
-            </View>
-            <FontAwesome name="chevron-right" size={12} color="#c084fc" />
-          </TouchableOpacity>
-        ) : null}
+        {/* Daily Notes (a day can hold several) */}
+        {dayNotes.length > 0 && (
+          <View className="mb-4">
+            <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">
+              {i18n.t('notes')} ({dayNotes.length})
+            </Text>
+            {dayNotes.map(note => (
+              <TouchableOpacity
+                key={note.noteId}
+                onPress={() => onEditNote && onEditNote(dateStr)}
+                className="bg-purple-950/50 border border-purple-800/60 p-3.5 rounded-2xl mb-2 flex-row items-center justify-between"
+              >
+                <View className="flex-row items-center flex-1 mr-2">
+                  <FontAwesome name="pencil-square" size={16} color="#c084fc" style={{ marginRight: 8 }} />
+                  <Text className="text-purple-200 text-xs flex-1" numberOfLines={2}>
+                    {note.content}
+                  </Text>
+                </View>
+                <FontAwesome name="chevron-right" size={12} color="#c084fc" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* All-Day Events Section */}
         {allDayEvents.length > 0 && (
@@ -169,10 +178,18 @@ export default function DayView({
                 key={e.id}
                 onPress={() => onEditEvent(e)}
                 style={{ backgroundColor: `${e.color || '#00FFFF'}25`, borderColor: e.color || '#00FFFF' }}
-                className="border p-3 rounded-xl mb-2 flex-row justify-between items-center"
+                className={`border p-3 rounded-xl mb-2 flex-row justify-between items-center ${
+                  e.completed ? 'opacity-60' : ''
+                }`}
               >
+                <View className="mr-3">
+                  <EventCompletionToggle event={e} onToggle={onToggleCompleted} />
+                </View>
                 <View className="flex-1 mr-2">
-                  <Text style={{ color: e.color || '#00FFFF' }} className="font-extrabold text-sm">
+                  <Text
+                    style={{ color: e.color || '#00FFFF' }}
+                    className={`font-extrabold text-sm ${e.completed ? 'line-through' : ''}`}
+                  >
                     {e.title}
                   </Text>
                   {e.startDate !== e.endDate && (
@@ -212,10 +229,20 @@ export default function DayView({
                         key={e.id}
                         onPress={() => onEditEvent(e)}
                         style={{ borderLeftColor: e.color || '#00FFFF', borderLeftWidth: 3 }}
-                        className="bg-gray-900 p-2.5 rounded-r-xl mb-1.5 flex-row justify-between items-center"
+                        className={`bg-gray-900 p-2.5 rounded-r-xl mb-1.5 flex-row justify-between items-center ${
+                          e.completed ? 'opacity-60' : ''
+                        }`}
                       >
+                        <View className="mr-2.5">
+                          <EventCompletionToggle event={e} onToggle={onToggleCompleted} size="sm" />
+                        </View>
                         <View className="flex-1 mr-2">
-                          <Text className="text-white font-bold text-xs" numberOfLines={1}>{e.title}</Text>
+                          <Text
+                            className={`text-white font-bold text-xs ${e.completed ? 'line-through text-gray-500' : ''}`}
+                            numberOfLines={1}
+                          >
+                            {e.title}
+                          </Text>
                           <Text className="text-gray-400 text-[10px]">
                             {e.startTime} - {e.endTime}
                           </Text>

@@ -6,6 +6,7 @@ import { CalendarEvent } from '@/db/events';
 import { RelationshipCounter, getCountersForDate } from '@/db/counters';
 import { UserRole } from '@/db/settings';
 import { getLocalDateString } from '@/utils/date';
+import EventCompletionToggle from './EventCompletionToggle';
 
 interface WeekViewProps {
   currentDate: Date;
@@ -20,6 +21,9 @@ interface WeekViewProps {
   partnerName?: string;
   onAddEvent: (dateStr: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
+  onToggleCompleted?: (event: CalendarEvent) => void;
+  /** Note counts per date, used for the little badge on each day row. */
+  noteCounts?: Record<string, number>;
 }
 
 export default function WeekView({
@@ -35,6 +39,8 @@ export default function WeekView({
   partnerName = '',
   onAddEvent,
   onEditEvent,
+  onToggleCompleted,
+  noteCounts = {},
 }: WeekViewProps) {
   // Get 7 days for the week of currentDate starting on Monday
   const getDaysOfWeek = (d: Date) => {
@@ -158,6 +164,13 @@ export default function WeekView({
                 </View>
 
                 <View className="flex-row items-center">
+                  {(noteCounts[item.dateStr] || 0) > 0 && (
+                    <View className="flex-row items-center bg-purple-950/80 px-2 py-1 rounded-lg border border-purple-700/60 mr-2">
+                      <FontAwesome name="pencil-square" size={10} color="#c084fc" style={{ marginRight: 4 }} />
+                      <Text className="text-purple-300 text-xs font-bold">{noteCounts[item.dateStr]}</Text>
+                    </View>
+                  )}
+
                   {micCount > 0 && (
                     <View className="flex-row items-center bg-cyan-950/80 px-2 py-1 rounded-lg border border-neonCyan/40 mr-2">
                       <FontAwesome name="microphone" size={10} color="#00FFFF" style={{ marginRight: 4 }} />
@@ -205,10 +218,20 @@ export default function WeekView({
                       activeOpacity={0.8}
                       onPress={() => onEditEvent(e)}
                       style={{ borderLeftColor: e.color || '#00FFFF', borderLeftWidth: 3 }}
-                      className="bg-gray-900/90 p-2.5 rounded-r-xl flex-row items-center justify-between mb-1.5"
+                      className={`bg-gray-900/90 p-2.5 rounded-r-xl flex-row items-center justify-between mb-1.5 ${
+                        e.completed ? 'opacity-60' : ''
+                      }`}
                     >
+                      <View className="mr-2.5">
+                        <EventCompletionToggle event={e} onToggle={onToggleCompleted} size="sm" />
+                      </View>
                       <View className="flex-1 mr-2">
-                        <Text className="text-white font-bold text-xs" numberOfLines={1}>
+                        <Text
+                          className={`font-bold text-xs ${
+                            e.completed ? 'text-gray-500 line-through' : 'text-white'
+                          }`}
+                          numberOfLines={1}
+                        >
                           {e.title}
                         </Text>
                         <Text className="text-gray-400 text-[10px] mt-0.5">

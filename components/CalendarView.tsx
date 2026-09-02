@@ -8,12 +8,14 @@ import { useFocusEffect } from 'expo-router';
 import i18n from '@/i18n';
 import { db } from '@/db/client';
 import { sessions } from '@/db/schema';
-import { getAllNotes, setNoteByDate, deleteNoteByDate } from '@/db/notes';
-import { CalendarEvent, getAllEvents, saveEvent, deleteEvent } from '@/db/events';
+import { NoteItem, getAllNotes, addNote, upsertNote, deleteNote } from '@/db/notes';
+import { CalendarEvent, getAllEvents, saveEvent, deleteEvent, setEventCompleted } from '@/db/events';
 import { RelationshipCounter, getAllCounters, getCountersForDate, saveCounter, deleteCounter } from '@/db/counters';
 import { syncService, ConnectionStatus } from '@/services/syncService';
 import { UserRole, getMyRole, getMyName, getPartnerName } from '@/db/settings';
 import { getLocalDateString } from '@/utils/date';
+import { rescheduleEventReminders } from '@/services/eventReminders';
+import { publishTodayPlanToWidgets } from '@/services/widgetSync';
 
 import PairingModal from './PairingModal';
 import DayActionModal, { ActionTab } from './DayActionModal';
@@ -23,6 +25,7 @@ import WeekView from './WeekView';
 import DayView from './DayView';
 import ProfileRoleModal from './ProfileRoleModal';
 import InAppNotificationToast from './InAppNotificationToast';
+import TodayPlanCard from './TodayPlanCard';
 
 const getDaysShort = () => i18n.t('daysShort') as unknown as string[];
 
@@ -38,7 +41,7 @@ export default function CalendarView() {
   const [partnerName, setPartnerNameState] = useState<string>('');
 
   const [sessionMap, setSessionMap] = useState<Record<string, number>>({});
-  const [noteMap, setNoteMap] = useState<Record<string, string>>({});
+  const [notesByDate, setNotesByDate] = useState<Record<string, NoteItem[]>>({});
   const [eventsList, setEventsList] = useState<CalendarEvent[]>([]);
   const [countersList, setCountersList] = useState<RelationshipCounter[]>([]);
 
@@ -77,17 +80,23 @@ export default function CalendarView() {
       setSessionMap(sMap);
       calculateMonthStats(sMap, year, month);
 
-      // 3. Notes
+      // 3. Notes (a day can hold several)
       const allNotes = await getAllNotes();
-      const nMap: Record<string, string> = {};
+      const nMap: Record<string, NoteItem[]> = {};
       allNotes.forEach(n => {
-        if (n.content?.trim()) nMap[n.date] = n.content.trim();
+        if (!n.content?.trim()) return;
+        (nMap[n.date] ||= []).push(n);
       });
-      setNoteMap(nMap);
+      setNotesByDate(nMap);
 
       // 4. Events
       const allEv = await getAllEvents();
       setEventsList(allEv);
+
+      // Keep the "starting now" reminders and the home screen widgets in step
+      // with the current plans.
+      rescheduleEventReminders(allEv, savedRole);
+      publishTodayPlanToWidgets(allEv, savedRole);
 
       // 5. Counters
       const allCnt = await getAllCounters();
@@ -129,13 +138,9 @@ export default function CalendarView() {
       });
     });
 
-    const unsubNote = syncService.addNoteListener(({ date, content }) => {
-      setNoteMap(prev => {
-        const next = { ...prev };
-        if (!content || !content.trim()) delete next[date];
-        else next[date] = content.trim();
-        return next;
-      });
+    // Note payloads arrive per-note; reloading keeps ordering and counts exact.
+    const unsubNote = syncService.addNoteListener(() => {
+      loadData();
     });
 
     const unsubEvent = syncService.addEventListener(() => {
@@ -310,26 +315,36 @@ export default function CalendarView() {
     loadData();
   };
 
-  const handleSaveNote = async (dStr: string, content: string) => {
+  // `noteId` present -> edit that note; absent -> append a new one to the day.
+  const handleSaveNote = async (dStr: string, content: string, noteId?: string) => {
     const trimmed = content.trim();
-    await setNoteByDate(dStr, trimmed);
-    setNoteMap(prev => {
-      const next = { ...prev };
-      if (!trimmed) delete next[dStr];
-      else next[dStr] = trimmed;
-      return next;
-    });
-    syncService.sendNoteUpdate(dStr, trimmed);
+    if (!trimmed) return;
+
+    if (noteId) {
+      const updated: NoteItem = { noteId, date: dStr, content: trimmed, updatedAt: Date.now() };
+      await upsertNote(updated);
+      syncService.sendNoteUpdate(updated);
+    } else {
+      const created = await addNote(dStr, trimmed);
+      if (created) syncService.sendNoteUpdate(created);
+    }
+
+    await loadData();
   };
 
-  const handleDeleteNote = async (dStr: string) => {
-    await deleteNoteByDate(dStr);
-    setNoteMap(prev => {
-      const next = { ...prev };
-      delete next[dStr];
-      return next;
-    });
-    syncService.sendNoteUpdate(dStr, '');
+  const handleDeleteNote = async (noteId: string, dStr: string) => {
+    await deleteNote(noteId);
+    syncService.sendNoteDelete(noteId, dStr);
+    await loadData();
+  };
+
+  // Toggling completion writes locally, then broadcasts the updated event so the
+  // partner's device (and their lock screen) learns the plan is done.
+  const handleToggleCompleted = async (event: CalendarEvent) => {
+    const updated = await setEventCompleted(event.id, !event.completed);
+    if (!updated) return;
+    syncService.sendEventUpdate(updated);
+    await loadData();
   };
 
   const handleSaveCounter = async (counterData: Omit<RelationshipCounter, 'id' | 'updatedAt'> & { id?: string }) => {
@@ -388,7 +403,8 @@ export default function CalendarView() {
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const count = sessionMap[dateStr] || 0;
-      const hasNote = Boolean(noteMap[dateStr]);
+      const dayNoteCount = notesByDate[dateStr]?.length ?? 0;
+      const hasNote = dayNoteCount > 0;
       const isSelected = dateStr === selectedDate;
       const isToday = dateStr === todayStr;
 
@@ -431,7 +447,12 @@ export default function CalendarView() {
 
             <View className="flex-row items-center">
               {hasNote && (
-                <View className="w-1.5 h-1.5 rounded-full bg-purple-400 mr-1" />
+                <View className="flex-row items-center mr-1">
+                  <View className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                  {dayNoteCount > 1 && (
+                    <Text className="text-[8px] text-purple-400 font-bold ml-0.5">{dayNoteCount}</Text>
+                  )}
+                </View>
               )}
               {count > 0 && (
                 <View className="flex-row items-center">
@@ -546,6 +567,20 @@ export default function CalendarView() {
 
           {getStatusIndicator()}
         </View>
+
+        {/* Today at a glance — mirrors the home screen widgets */}
+        <TodayPlanCard
+          events={filteredEvents}
+          notes={Object.values(notesByDate).flat()}
+          counters={countersList}
+          myRole={myRole}
+          onPressDate={(dStr) => {
+            setSelectedDate(dStr);
+            handleSwitchViewMode('day');
+          }}
+          onEditEvent={handleOpenEditEvent}
+          onToggleCompleted={handleToggleCompleted}
+        />
 
         {/* Milestone & Relationship Counters */}
         <RelationshipCounterCard
@@ -697,7 +732,8 @@ export default function CalendarView() {
               partnerName={partnerName}
               onAddEvent={handleOpenAddEvent}
               onEditEvent={handleOpenEditEvent}
-              dailyNote={noteMap[selectedDate]}
+              onToggleCompleted={handleToggleCompleted}
+              dayNotes={notesByDate[selectedDate] || []}
               onEditNote={handleOpenEditNote}
             />
           </View>
@@ -717,6 +753,10 @@ export default function CalendarView() {
             partnerName={partnerName}
             onAddEvent={handleOpenAddEvent}
             onEditEvent={handleOpenEditEvent}
+            onToggleCompleted={handleToggleCompleted}
+            noteCounts={Object.fromEntries(
+              Object.entries(notesByDate).map(([d, list]) => [d, list.length])
+            )}
           />
         )}
 
@@ -735,7 +775,8 @@ export default function CalendarView() {
             partnerName={partnerName}
             onAddEvent={handleOpenAddEvent}
             onEditEvent={handleOpenEditEvent}
-            dailyNote={noteMap[selectedDate]}
+            onToggleCompleted={handleToggleCompleted}
+            dayNotes={notesByDate[selectedDate] || []}
             onEditNote={handleOpenEditNote}
           />
         )}
@@ -750,7 +791,7 @@ export default function CalendarView() {
         eventToEdit={selectedEventToEdit}
         onSaveEvent={handleSaveEvent}
         onDeleteEvent={handleDeleteEvent}
-        initialNoteContent={noteMap[selectedDate] || ''}
+        dayNotes={notesByDate[selectedDate] || []}
         onSaveNote={handleSaveNote}
         onDeleteNote={handleDeleteNote}
         currentSessionCount={sessionMap[selectedDate] || 0}

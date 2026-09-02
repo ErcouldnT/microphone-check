@@ -122,9 +122,8 @@ const styles = StyleSheet.create({
     elevation: 15,
   },
   logoImage: {
-    width: 160,
-    height: 160,
-    borderRadius: 28,
+    width: 170,
+    height: 170,
   },
   textWrapper: {
     alignItems: 'center',

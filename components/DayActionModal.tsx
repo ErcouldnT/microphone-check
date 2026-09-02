@@ -16,7 +16,9 @@ import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
 import { RelationshipCounter } from '@/db/counters';
 import { getMyRole, getMyName, getPartnerName, UserRole } from '@/db/settings';
+import { NoteItem } from '@/db/notes';
 import { getLocalDateString } from '@/utils/date';
+import TimeField from './TimeField';
 
 export type ActionTab = 'event' | 'note' | 'session' | 'counter';
 
@@ -29,10 +31,10 @@ interface DayActionModalProps {
   eventToEdit?: CalendarEvent | null;
   onSaveEvent: (event: Omit<CalendarEvent, 'id' | 'author' | 'updatedAt'> & { id?: string }) => void;
   onDeleteEvent?: (id: string) => void;
-  // Note props
-  initialNoteContent?: string;
-  onSaveNote: (date: string, content: string) => void;
-  onDeleteNote?: (date: string) => void;
+  // Note props — a day can hold any number of notes
+  dayNotes?: NoteItem[];
+  onSaveNote: (date: string, content: string, noteId?: string) => void;
+  onDeleteNote?: (noteId: string, date: string) => void;
   // Session / Day Count props
   currentSessionCount?: number;
   onUpdateSessionCount?: (date: string, delta: number) => void;
@@ -62,7 +64,7 @@ export default function DayActionModal({
   eventToEdit,
   onSaveEvent,
   onDeleteEvent,
-  initialNoteContent = '',
+  dayNotes = [],
   onSaveNote,
   onDeleteNote,
   currentSessionCount = 0,
@@ -88,9 +90,11 @@ export default function DayActionModal({
   const [endTime, setEndTime] = useState('11:00');
   const [eventColor, setEventColor] = useState(EVENT_COLORS[0].value);
   const [eventTarget, setEventTarget] = useState<'male' | 'female' | 'both'>('male');
+  const [eventCompleted, setEventCompleted] = useState(false);
 
-  // Note State
-  const [noteContent, setNoteContent] = useState(initialNoteContent);
+  // Note State — draft text plus which existing note is being edited (if any)
+  const [noteDraft, setNoteDraft] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
 
   // Counter State
   const [counterTitle, setCounterTitle] = useState('');
@@ -105,7 +109,8 @@ export default function DayActionModal({
       getPartnerName().then(setPartnerNameState);
 
       setActiveTab(initialTab);
-      setNoteContent(initialNoteContent);
+      setNoteDraft('');
+      setEditingNoteId(null);
 
       if (eventToEdit) {
         setEventTitle(eventToEdit.title);
@@ -116,6 +121,7 @@ export default function DayActionModal({
         setStartTime(eventToEdit.startTime || '10:00');
         setEndTime(eventToEdit.endTime || '11:00');
         setEventColor(eventToEdit.color);
+        setEventCompleted(Boolean(eventToEdit.completed));
         const mappedTarget =
           eventToEdit.target === 'you'
             ? myRole
@@ -133,6 +139,7 @@ export default function DayActionModal({
         setEndTime('11:00');
         setEventColor(EVENT_COLORS[0].value);
         setEventTarget(myRole);
+        setEventCompleted(false);
       }
 
       if (counterToEdit) {
@@ -147,7 +154,7 @@ export default function DayActionModal({
         setCounterIcon('❤️');
       }
     }
-  }, [visible, selectedDate, initialTab, eventToEdit, initialNoteContent, counterToEdit]);
+  }, [visible, selectedDate, initialTab, eventToEdit, counterToEdit]);
 
   // Formatted date string for header
   const getFormattedDate = (dateStr: string) => {
@@ -175,13 +182,44 @@ export default function DayActionModal({
       endTime: !isAllDay ? endTime : undefined,
       color: eventColor,
       target: eventTarget,
+      completed: eventCompleted,
     });
     onClose();
   };
 
-  const handleSaveNoteAction = () => {
-    onSaveNote(selectedDate, noteContent.trim());
-    onClose();
+  // Adds a new note, or saves the edit in progress. The modal stays open so
+  // several notes can be added in a row.
+  const handleSubmitNote = () => {
+    const trimmed = noteDraft.trim();
+    if (!trimmed) {
+      Alert.alert(i18n.t('error'), String(i18n.t('emptyNoteWarning')));
+      return;
+    }
+    onSaveNote(selectedDate, trimmed, editingNoteId ?? undefined);
+    setNoteDraft('');
+    setEditingNoteId(null);
+  };
+
+  const handleEditNote = (note: NoteItem) => {
+    setEditingNoteId(note.noteId);
+    setNoteDraft(note.content);
+  };
+
+  const handleDeleteNoteAction = (note: NoteItem) => {
+    Alert.alert(String(i18n.t('delete')), String(i18n.t('deleteNoteConfirm')), [
+      { text: String(i18n.t('cancel')), style: 'cancel' },
+      {
+        text: String(i18n.t('delete')),
+        style: 'destructive',
+        onPress: () => {
+          if (onDeleteNote) onDeleteNote(note.noteId, selectedDate);
+          if (editingNoteId === note.noteId) {
+            setEditingNoteId(null);
+            setNoteDraft('');
+          }
+        },
+      },
+    ]);
   };
 
   const handleSaveCounterAction = () => {
@@ -397,7 +435,7 @@ export default function DayActionModal({
                         key={c.value}
                         onPress={() => setEventColor(c.value)}
                         className={`w-7 h-7 rounded-full items-center justify-center ${
-                          eventColor === c.value ? 'ring-2 ring-white scale-110' : 'opacity-70'
+                          eventColor === c.value ? 'border-2 border-white' : 'opacity-70'
                         }`}
                         style={{ backgroundColor: c.value }}
                       >
@@ -439,7 +477,9 @@ export default function DayActionModal({
 
                 {/* All Day Toggle */}
                 <View className="flex-row justify-between items-center bg-black/60 p-3 rounded-xl border border-gray-800">
-                  <Text className="text-gray-300 text-xs font-bold">{i18n.t('allDay')}</Text>
+                  <Text className="text-gray-300 text-xs font-bold flex-1 mr-3" numberOfLines={1}>
+                    {i18n.t('allDay')}
+                  </Text>
                   <Switch
                     value={isAllDay}
                     onValueChange={setIsAllDay}
@@ -451,30 +491,20 @@ export default function DayActionModal({
                 {/* Time Range (if not all day) */}
                 {!isAllDay && (
                   <View className="flex-row gap-2">
-                    <View className="flex-1">
-                      <Text className="text-gray-400 text-xs font-bold uppercase mb-1.5">
-                        {i18n.t('startTime')}
-                      </Text>
-                      <TextInput
-                        value={startTime}
-                        onChangeText={setStartTime}
-                        placeholder="HH:MM"
-                        placeholderTextColor="#555"
-                        className="bg-black border border-gray-800 text-white px-3 py-2 rounded-xl text-xs text-center font-mono"
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-gray-400 text-xs font-bold uppercase mb-1.5">
-                        {i18n.t('endTime')}
-                      </Text>
-                      <TextInput
-                        value={endTime}
-                        onChangeText={setEndTime}
-                        placeholder="HH:MM"
-                        placeholderTextColor="#555"
-                        className="bg-black border border-gray-800 text-white px-3 py-2 rounded-xl text-xs text-center font-mono"
-                      />
-                    </View>
+                    <TimeField
+                      label={String(i18n.t('startTime'))}
+                      value={startTime}
+                      onChange={(next) => {
+                        setStartTime(next);
+                        // Keep the range sane: pull the end time along if it fell behind.
+                        if (endTime && next > endTime) setEndTime(next);
+                      }}
+                    />
+                    <TimeField
+                      label={String(i18n.t('endTime'))}
+                      value={endTime}
+                      onChange={setEndTime}
+                    />
                   </View>
                 )}
 
@@ -493,6 +523,33 @@ export default function DayActionModal({
                     className="bg-black border border-gray-800 text-white px-3.5 py-2.5 rounded-xl text-sm min-h-[55px]"
                   />
                 </View>
+
+                {/* Completion state — only meaningful for a saved plan */}
+                {eventToEdit && (
+                  <TouchableOpacity
+                    onPress={() => setEventCompleted(v => !v)}
+                    activeOpacity={0.8}
+                    className={`flex-row justify-between items-center p-3 rounded-xl border ${
+                      eventCompleted
+                        ? 'bg-green-950/60 border-green-500/60'
+                        : 'bg-black/60 border-gray-800'
+                    }`}
+                  >
+                    <Text
+                      className={`text-xs font-bold ${
+                        eventCompleted ? 'text-green-400' : 'text-gray-300'
+                      }`}
+                    >
+                      {eventCompleted ? `✓ ${i18n.t('completed')}` : i18n.t('notCompleted')}
+                    </Text>
+                    <Switch
+                      value={eventCompleted}
+                      onValueChange={setEventCompleted}
+                      trackColor={{ false: '#374151', true: '#22c55e' }}
+                      thumbColor={eventCompleted ? '#000' : '#9ca3af'}
+                    />
+                  </TouchableOpacity>
+                )}
 
                 {/* Save & Delete Buttons */}
                 <View className="flex-row gap-2 pt-2">
@@ -524,38 +581,110 @@ export default function DayActionModal({
             {/* ========================================================= */}
             {activeTab === 'note' && (
               <View className="space-y-4">
-                <Text className="text-gray-400 text-xs font-bold uppercase">
-                  {getFormattedDate(selectedDate)} Gününün Notu
-                </Text>
-                <TextInput
-                  value={noteContent}
-                  onChangeText={setNoteContent}
-                  placeholder="Bugün için ortak bir not, anı veya yapılacaklar yazın..."
-                  placeholderTextColor="#555"
-                  multiline
-                  textAlignVertical="top"
-                  className="bg-black border border-gray-800 text-white p-4 rounded-2xl text-sm min-h-[140px] leading-relaxed"
-                />
+                <View className="flex-row justify-between items-center">
+                  <Text className="text-gray-400 text-xs font-bold uppercase">
+                    {getFormattedDate(selectedDate)}
+                  </Text>
+                  <Text className="text-gray-500 text-xs font-bold">
+                    {dayNotes.length} {i18n.t('noteCountSuffix')}
+                  </Text>
+                </View>
 
-                <View className="flex-row gap-2 pt-2">
-                  {initialNoteContent ? (
+                {/* Existing notes for this day */}
+                {dayNotes.length === 0 ? (
+                  <View className="py-5 items-center">
+                    <FontAwesome name="sticky-note-o" size={24} color="#444" style={{ marginBottom: 8 }} />
+                    <Text className="text-gray-500 text-xs">{i18n.t('noNotesForDay')}</Text>
+                  </View>
+                ) : (
+                  <View className="mb-1">
+                    {dayNotes.map((note, index) => {
+                      const isEditing = editingNoteId === note.noteId;
+                      return (
+                        <View
+                          key={note.noteId}
+                          className={`p-3 rounded-2xl mb-2 border flex-row items-start justify-between ${
+                            isEditing
+                              ? 'bg-purple-950/60 border-neonPink'
+                              : 'bg-black/60 border-gray-800'
+                          }`}
+                        >
+                          <TouchableOpacity
+                            onPress={() => handleEditNote(note)}
+                            activeOpacity={0.8}
+                            className="flex-1 mr-2 flex-row items-start"
+                          >
+                            <Text className="text-gray-600 text-[11px] font-bold mr-2 mt-0.5">
+                              {index + 1}.
+                            </Text>
+                            <Text className="text-purple-100 text-xs flex-1 leading-relaxed">
+                              {note.content}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={() => handleDeleteNoteAction(note)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            className="p-1"
+                          >
+                            <FontAwesome name="trash" size={14} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {/* Composer: adds a new note, or edits the selected one */}
+                <View className="border-t border-gray-900 pt-3">
+                  <Text className="text-gray-400 text-xs font-bold uppercase mb-1.5">
+                    {editingNoteId ? i18n.t('notes') : i18n.t('newNote')}
+                  </Text>
+                  <TextInput
+                    value={noteDraft}
+                    onChangeText={setNoteDraft}
+                    placeholder={String(i18n.t('notePlaceholder'))}
+                    placeholderTextColor="#555"
+                    multiline
+                    textAlignVertical="top"
+                    className="bg-black border border-gray-800 text-white p-4 rounded-2xl text-sm min-h-[100px] leading-relaxed"
+                  />
+
+                  <View className="flex-row gap-2 pt-3">
+                    {editingNoteId && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setEditingNoteId(null);
+                          setNoteDraft('');
+                        }}
+                        className="bg-gray-900 border border-gray-700 px-4 rounded-xl items-center justify-center"
+                      >
+                        <Text className="text-gray-300 font-bold text-xs uppercase">
+                          {i18n.t('cancel')}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
-                      onPress={() => {
-                        if (onDeleteNote) onDeleteNote(selectedDate);
-                        onClose();
-                      }}
-                      className="bg-red-950/80 border border-red-500/60 p-3.5 rounded-xl items-center justify-center px-4"
+                      onPress={handleSubmitNote}
+                      className="flex-1 bg-neonPink py-3.5 rounded-xl items-center justify-center flex-row"
                     >
-                      <FontAwesome name="trash" size={16} color="#ef4444" />
+                      <FontAwesome
+                        name={editingNoteId ? 'check' : 'plus'}
+                        size={13}
+                        color="#fff"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text className="text-white font-extrabold text-sm uppercase tracking-wider">
+                        {editingNoteId ? i18n.t('save') : i18n.t('addNote')}
+                      </Text>
                     </TouchableOpacity>
-                  ) : null}
+                  </View>
+
                   <TouchableOpacity
-                    onPress={handleSaveNoteAction}
-                    className="flex-1 bg-neonPink py-3.5 rounded-xl items-center justify-center"
+                    onPress={onClose}
+                    className="w-full bg-gray-900 border border-gray-800 py-3 rounded-xl items-center mt-2"
                   >
-                    <Text className="text-white font-extrabold text-sm uppercase tracking-wider">
-                      Notu Kaydet
-                    </Text>
+                    <Text className="text-gray-300 font-bold text-xs uppercase">{i18n.t('done')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>

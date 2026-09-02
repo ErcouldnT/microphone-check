@@ -5,6 +5,8 @@ import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
 import { RelationshipCounter, getDaysDifference } from '@/db/counters';
 import { UserRole } from '@/db/settings';
+import { NoteItem } from '@/db/notes';
+import EventCompletionToggle, { CompletedBadge } from './EventCompletionToggle';
 
 interface DailyScheduleListProps {
   selectedDate: string; // YYYY-MM-DD
@@ -15,7 +17,8 @@ interface DailyScheduleListProps {
   partnerName?: string;
   onAddEvent: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
-  dailyNote?: string;
+  onToggleCompleted?: (event: CalendarEvent) => void;
+  dayNotes?: NoteItem[];
   onEditNote?: (date: string) => void;
 }
 
@@ -28,7 +31,8 @@ export default function DailyScheduleList({
   partnerName = '',
   onAddEvent,
   onEditEvent,
-  dailyNote,
+  onToggleCompleted,
+  dayNotes = [],
   onEditNote,
 }: DailyScheduleListProps) {
   // Format localized date
@@ -149,24 +153,28 @@ export default function DailyScheduleList({
         </View>
       )}
 
-      {/* Daily Note Preview (if exists) */}
-      {dailyNote ? (
+      {/* Daily note previews — a day can hold several */}
+      {dayNotes.map((note, index) => (
         <TouchableOpacity
+          key={note.noteId}
           onPress={() => onEditNote && onEditNote(selectedDate)}
-          className="bg-purple-950/40 border border-purple-800/60 p-3 rounded-2xl mb-3 flex-row items-center justify-between"
+          className="bg-purple-950/40 border border-purple-800/60 p-3 rounded-2xl mb-2 flex-row items-center justify-between"
         >
           <View className="flex-row items-center flex-1 mr-2">
             <FontAwesome name="pencil-square" size={14} color="#c084fc" style={{ marginRight: 8 }} />
+            {dayNotes.length > 1 && (
+              <Text className="text-purple-400/70 text-[11px] font-bold mr-1.5">{index + 1}.</Text>
+            )}
             <Text className="text-purple-200 text-xs flex-1" numberOfLines={2}>
-              {dailyNote}
+              {note.content}
             </Text>
           </View>
           <FontAwesome name="chevron-right" size={10} color="#c084fc" />
         </TouchableOpacity>
-      ) : null}
+      ))}
 
       {/* Events List */}
-      {events.length === 0 && counters.length === 0 ? (
+      {events.length === 0 && counters.length === 0 && dayNotes.length === 0 ? (
         <View className="py-6 items-center justify-center">
           <FontAwesome name="calendar-o" size={28} color="#444" style={{ marginBottom: 8 }} />
           <Text className="text-gray-500 text-sm font-medium text-center mb-3">
@@ -189,9 +197,15 @@ export default function DailyScheduleList({
                 key={e.id}
                 activeOpacity={0.8}
                 onPress={() => onEditEvent(e)}
-                className="bg-gray-900 border border-gray-800/80 p-3 rounded-2xl flex-row items-center justify-between mb-2"
+                className={`bg-gray-900 border border-gray-800/80 p-3 rounded-2xl flex-row items-center justify-between mb-2 ${
+                  e.completed ? 'opacity-60' : ''
+                }`}
               >
                 <View className="flex-row items-center flex-1 mr-2">
+                  <View className="mr-3">
+                    <EventCompletionToggle event={e} onToggle={onToggleCompleted} />
+                  </View>
+
                   {/* Left Colored Stripe */}
                   <View
                     className="w-2.5 h-10 rounded-full mr-3"
@@ -199,11 +213,17 @@ export default function DailyScheduleList({
                   />
 
                   <View className="flex-1">
-                    <View className="flex-row items-center mb-1">
-                      <Text className="text-white font-bold text-sm mr-2" numberOfLines={1}>
+                    <View className="flex-row items-center mb-1 flex-wrap gap-1">
+                      <Text
+                        className={`font-bold text-sm mr-1 ${
+                          e.completed ? 'text-gray-500 line-through' : 'text-white'
+                        }`}
+                        numberOfLines={1}
+                      >
                         {e.title}
                       </Text>
                       {getTargetBadge(e.target)}
+                      {e.completed ? <CompletedBadge /> : null}
                     </View>
 
                     {/* Time / Span details */}

@@ -37,6 +37,7 @@ export default function RelationshipCounterCard({
   const [internalList, setInternalList] = useState<RelationshipCounter[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCounter, setEditingCounter] = useState<RelationshipCounter | null>(null);
+  const [showPast, setShowPast] = useState(false);
 
   // Form states
   const [title, setTitle] = useState('');
@@ -77,7 +78,16 @@ export default function RelationshipCounterCard({
     }
   }, [counters]);
 
-  const displayList = counters || internalList;
+  const fullList = counters || internalList;
+
+  // A countdown whose target date has gone by is noise on the strip, so it is
+  // hidden by default. It stays reachable behind the toggle below, otherwise it
+  // could never be edited or deleted again.
+  const isPastCountdown = (c: RelationshipCounter) =>
+    c.type === 'until' && getDaysDifference(c.targetDate, 'until') < 0;
+
+  const pastCount = fullList.filter(isPastCountdown).length;
+  const displayList = showPast ? fullList : fullList.filter(c => !isPastCountdown(c));
 
   const handleOpenAdd = () => {
     if (onAddCounter) {
@@ -155,7 +165,9 @@ export default function RelationshipCounterCard({
               activeOpacity={0.85}
               onPress={() => handleOpenEdit(c)}
               className={`mr-3 p-3.5 rounded-2xl border flex-row items-center ${
-                isUntil
+                isPastCountdown(c)
+                  ? 'bg-gray-900/60 border-gray-700 opacity-60'
+                  : isUntil
                   ? 'bg-purple-950/40 border-purple-600/50'
                   : 'bg-pink-950/40 border-neonPink/50'
               }`}
@@ -164,6 +176,7 @@ export default function RelationshipCounterCard({
               <View>
                 <Text className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">
                   {c.title}
+                  {isPastCountdown(c) ? ` · ${i18n.t('passed')}` : ''}
                 </Text>
                 <View className="flex-row items-baseline mt-0.5">
                   <Text
@@ -189,6 +202,24 @@ export default function RelationshipCounterCard({
             </TouchableOpacity>
           );
         })}
+
+        {/* Passed-countdown reveal toggle */}
+        {pastCount > 0 && (
+          <TouchableOpacity
+            onPress={() => setShowPast(v => !v)}
+            className="bg-gray-900 border border-gray-800 px-3.5 mr-3 rounded-2xl items-center justify-center flex-row"
+          >
+            <FontAwesome
+              name={showPast ? 'eye-slash' : 'history'}
+              size={13}
+              color="#9ca3af"
+              style={{ marginRight: 6 }}
+            />
+            <Text className="text-gray-400 text-xs font-bold">
+              {showPast ? i18n.t('hidePastCounters') : `${i18n.t('showPastCounters')} (${pastCount})`}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Add Button Pill */}
         <TouchableOpacity
