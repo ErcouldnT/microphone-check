@@ -13,6 +13,8 @@ export interface CalendarEvent {
   isAllDay: boolean;
   color: string;     // e.g. #00FFFF, #FF007F, #FACC15, #10B981, #A855F7
   target: 'male' | 'female' | 'both' | 'you' | 'partner';
+  /** Whether the plan has been carried out. Defaults to false. */
+  completed?: boolean;
   author?: string;
   createdAt?: number;
   updatedAt?: number;
@@ -32,6 +34,7 @@ export const getAllEvents = async (): Promise<CalendarEvent[]> => {
       isAllDay: Boolean(e.isAllDay),
       color: e.color,
       target: e.target as 'you' | 'partner' | 'both',
+      completed: Boolean(e.completed),
       author: e.author ?? undefined,
       createdAt: e.createdAt ?? undefined,
       updatedAt: e.updatedAt ?? undefined,
@@ -67,6 +70,7 @@ export const saveEvent = async (event: CalendarEvent): Promise<void> => {
         isAllDay: event.isAllDay ? 1 : 0,
         color: event.color,
         target: event.target,
+        completed: event.completed ? 1 : 0,
         author: event.author ?? null,
         updatedAt: now,
       }).where(eq(events.id, event.id));
@@ -82,6 +86,7 @@ export const saveEvent = async (event: CalendarEvent): Promise<void> => {
         isAllDay: event.isAllDay ? 1 : 0,
         color: event.color,
         target: event.target,
+        completed: event.completed ? 1 : 0,
         author: event.author ?? null,
         createdAt: event.createdAt ?? now,
         updatedAt: now,
@@ -108,5 +113,45 @@ export const bulkSetEvents = async (list: CalendarEvent[]): Promise<void> => {
     }
   } catch (err) {
     console.error('Error in bulkSetEvents:', err);
+  }
+};
+
+/**
+ * Flips an event's completion flag and returns the updated event so the caller
+ * can broadcast it, or null when the event no longer exists locally.
+ */
+export const setEventCompleted = async (
+  id: string,
+  completed: boolean
+): Promise<CalendarEvent | null> => {
+  try {
+    const rows = await db.select().from(events).where(eq(events.id, id));
+    if (rows.length === 0) return null;
+
+    const now = Date.now();
+    await db.update(events)
+      .set({ completed: completed ? 1 : 0, updatedAt: now })
+      .where(eq(events.id, id));
+
+    const e = rows[0];
+    return {
+      id: e.id,
+      title: e.title,
+      description: e.description ?? undefined,
+      startDate: e.startDate,
+      endDate: e.endDate,
+      startTime: e.startTime ?? undefined,
+      endTime: e.endTime ?? undefined,
+      isAllDay: Boolean(e.isAllDay),
+      color: e.color,
+      target: e.target as 'you' | 'partner' | 'both',
+      completed,
+      author: e.author ?? undefined,
+      createdAt: e.createdAt ?? undefined,
+      updatedAt: now,
+    };
+  } catch (err) {
+    console.error(`Error toggling completion for event ${id}:`, err);
+    return null;
   }
 };
