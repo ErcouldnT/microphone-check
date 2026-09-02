@@ -8,6 +8,9 @@ import 'react-native-reanimated';
 import '../global.css';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { ToastProvider } from '@/components/ui/Toast';
+import SyncToastBridge from '@/components/SyncToastBridge';
+import { CalendarDataProvider } from '@/components/CalendarDataProvider';
 import { initDb } from '@/db/client';
 import { syncService } from '@/services/syncService';
 
@@ -84,9 +87,14 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
+      <ToastProvider>
+        <CalendarDataProvider>
+          <SyncToastBridge />
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          </Stack>
+        </CalendarDataProvider>
+      </ToastProvider>
     </ThemeProvider>
   );
 }

@@ -1,10 +1,5 @@
-import CalendarView from '@/components/CalendarView';
-import { View } from 'react-native';
+import TodayScreen from '@/components/screens/TodayScreen';
 
-export default function TabOneScreen() {
-  return (
-    <View className="flex-1 bg-black">
-      <CalendarView />
-    </View>
-  );
+export default function TodayTab() {
+  return <TodayScreen />;
 }

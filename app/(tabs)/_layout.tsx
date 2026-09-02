@@ -1,46 +1,65 @@
-import i18n from '@/i18n';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Tabs } from 'expo-router';
 import React from 'react';
+import { Tabs } from 'expo-router';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import i18n from '@/i18n';
+import {
+  CalendarIcon,
+  IconColor,
+  SettingsIcon,
+  StatsIcon,
+  TodayIcon,
+} from '@/components/ui/icons';
 
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
-function TabBarIcon(props: {
-  name: React.ComponentProps<typeof FontAwesome>['name'];
-  color: string;
-}) {
-  return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
-}
+const ACTIVE = IconColor.cyan;
+const INACTIVE = '#5B5B66';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#00FFFF',
-        tabBarInactiveTintColor: '#666',
-        tabBarStyle: { backgroundColor: '#000', borderTopColor: '#333' },
-        headerStyle: { backgroundColor: '#000' },
-        headerTintColor: '#fff',
-        tabBarShowLabel: true,
-      }}>
+        headerShown: false,
+        tabBarActiveTintColor: ACTIVE,
+        tabBarInactiveTintColor: INACTIVE,
+        tabBarStyle: {
+          backgroundColor: '#08080C',
+          borderTopColor: '#1F1F27',
+          borderTopWidth: 1,
+          height: 64,
+          paddingTop: 6,
+          paddingBottom: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '700',
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
+          title: i18n.t('today'),
+          tabBarIcon: ({ color }) => <TodayIcon size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
           title: i18n.t('calendar'),
-          tabBarIcon: ({ color }) => <TabBarIcon name="calendar" color={color} />,
-          headerShown: false,
-
+          tabBarIcon: ({ color }) => <CalendarIcon size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="stats"
         options={{
           title: i18n.t('stats'),
-          tabBarIcon: ({ color }) => <TabBarIcon name="bar-chart" color={color} />,
-          headerShown: false,
+          tabBarIcon: ({ color }) => <StatsIcon size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: i18n.t('settings'),
+          tabBarIcon: ({ color }) => <SettingsIcon size={22} color={color} />,
         }}
       />
     </Tabs>
