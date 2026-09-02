@@ -113,6 +113,39 @@ const translations = {
         scheduleUpdated: "Takvim Güncellendi",
         newPlanAdded: "Yeni bir plan eklendi.",
         eventRemoved: "Bir etkinlik kaldırıldı.",
+        // --- v3.1: Event completion ---
+        completed: "Tamamlandı",
+        notCompleted: "Tamamlanmadı",
+        markCompleted: "Tamamlandı İşaretle",
+        markNotCompleted: "Geri Al",
+        completionStatus: "Durum",
+        done: "Tamam",
+        delete: "Sil",
+        eventColor: "Renk",
+        eventDescription: "Açıklama",
+        // --- v3.1: Multiple notes per day ---
+        notes: "Notlar",
+        addNote: "Not Ekle",
+        newNote: "Yeni Not",
+        noNotesForDay: "Bu gün için henüz not yok.",
+        noteCountSuffix: "not",
+        deleteNoteConfirm: "Bu notu silmek istediğinize emin misiniz?",
+        emptyNoteWarning: "Boş not kaydedilemez.",
+        // --- v3.1: Past counters ---
+        showPastCounters: "Geçmişi Göster",
+        hidePastCounters: "Geçmişi Gizle",
+        passed: "Geçti",
+        // --- v3.1: Partner activity notifications ---
+        happeningNow: "Şu An Başlıyor",
+        partnerDoingNow: "Partnerin şu an: %{title}",
+        youDoingNow: "Şu an senin planın: %{title}",
+        bothDoingNow: "Şu an ikinizin planı: %{title}",
+        partnerCompletedEvent: "Partnerin \"%{title}\" planını tamamladı ✅",
+        partnerUncompletedEvent: "Partnerin \"%{title}\" planını tamamlanmadı olarak işaretledi",
+        // --- v3.1: Today plan widget ---
+        todaysPlan: "Bugünün Planı",
+        noPlanToday: "Bugün için plan yok.",
+        moreItems: "%{count} tane daha",
         months: {
             0: "Ocak", 1: "Şubat", 2: "Mart", 3: "Nisan", 4: "Mayıs", 5: "Haziran",
             6: "Temmuz", 7: "Ağustos", 8: "Eylül", 9: "Ekim", 10: "Kasım", 11: "Aralık"
@@ -230,6 +263,39 @@ const translations = {
         scheduleUpdated: "Schedule Updated",
         newPlanAdded: "A new plan was added.",
         eventRemoved: "An event was removed.",
+        // --- v3.1: Event completion ---
+        completed: "Completed",
+        notCompleted: "Not completed",
+        markCompleted: "Mark completed",
+        markNotCompleted: "Undo",
+        completionStatus: "Status",
+        done: "Done",
+        delete: "Delete",
+        eventColor: "Color",
+        eventDescription: "Description",
+        // --- v3.1: Multiple notes per day ---
+        notes: "Notes",
+        addNote: "Add Note",
+        newNote: "New Note",
+        noNotesForDay: "No notes for this day yet.",
+        noteCountSuffix: "notes",
+        deleteNoteConfirm: "Are you sure you want to delete this note?",
+        emptyNoteWarning: "An empty note cannot be saved.",
+        // --- v3.1: Past counters ---
+        showPastCounters: "Show past",
+        hidePastCounters: "Hide past",
+        passed: "Passed",
+        // --- v3.1: Partner activity notifications ---
+        happeningNow: "Starting now",
+        partnerDoingNow: "Your partner is doing this now: %{title}",
+        youDoingNow: "Your plan right now: %{title}",
+        bothDoingNow: "Your shared plan right now: %{title}",
+        partnerCompletedEvent: "Your partner completed \"%{title}\" ✅",
+        partnerUncompletedEvent: "Your partner marked \"%{title}\" as not completed",
+        // --- v3.1: Today plan widget ---
+        todaysPlan: "Today's Plan",
+        noPlanToday: "Nothing planned for today.",
+        moreItems: "%{count} more",
         months: {
             0: "January", 1: "February", 2: "March", 3: "April", 4: "May", 5: "June",
             6: "July", 7: "August", 8: "September", 9: "October", 10: "November", 11: "December"
@@ -347,6 +413,39 @@ const translations = {
         scheduleUpdated: "Расписание обновлено",
         newPlanAdded: "Добавлено новое событие.",
         eventRemoved: "Событие удалено.",
+        // --- v3.1: Event completion ---
+        completed: "Выполнено",
+        notCompleted: "Не выполнено",
+        markCompleted: "Отметить выполненным",
+        markNotCompleted: "Отменить",
+        completionStatus: "Статус",
+        done: "Готово",
+        delete: "Удалить",
+        eventColor: "Цвет",
+        eventDescription: "Описание",
+        // --- v3.1: Multiple notes per day ---
+        notes: "Заметки",
+        addNote: "Добавить заметку",
+        newNote: "Новая заметка",
+        noNotesForDay: "На этот день заметок пока нет.",
+        noteCountSuffix: "заметок",
+        deleteNoteConfirm: "Вы уверены, что хотите удалить эту заметку?",
+        emptyNoteWarning: "Пустую заметку сохранить нельзя.",
+        // --- v3.1: Past counters ---
+        showPastCounters: "Показать прошедшие",
+        hidePastCounters: "Скрыть прошедшие",
+        passed: "Прошло",
+        // --- v3.1: Partner activity notifications ---
+        happeningNow: "Начинается сейчас",
+        partnerDoingNow: "Партнёр сейчас занят: %{title}",
+        youDoingNow: "Твой план сейчас: %{title}",
+        bothDoingNow: "Ваш общий план сейчас: %{title}",
+        partnerCompletedEvent: "Партнёр выполнил \"%{title}\" ✅",
+        partnerUncompletedEvent: "Партнёр отметил \"%{title}\" как невыполненное",
+        // --- v3.1: Today plan widget ---
+        todaysPlan: "План на сегодня",
+        noPlanToday: "На сегодня планов нет.",
+        moreItems: "ещё %{count}",
         months: {
             0: "Январь", 1: "Февраль", 2: "Март", 3: "Апрель", 4: "Май", 5: "Июнь",
             6: "Июль", 7: "Август", 8: "Сентябрь", 9: "Октябрь", 10: "Ноябрь", 11: "Декабрь"
