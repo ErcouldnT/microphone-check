@@ -1,11 +1,12 @@
 import { getSetting, setSetting, removeSetting, getApiKey, setApiKey } from '@/db/settings';
 import { db } from '@/db/client';
-import { sessions, notes, events, counters } from '@/db/schema';
+import { sessions, events, counters } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { setNoteByDate, getAllNotes } from '@/db/notes';
+import { NoteItem, getAllNotes, upsertNote, deleteNote, bulkSetNotes } from '@/db/notes';
 import { CalendarEvent, getAllEvents, saveEvent, deleteEvent, bulkSetEvents } from '@/db/events';
 import { RelationshipCounter, getAllCounters, saveCounter, deleteCounter, bulkSetCounters } from '@/db/counters';
 import { notificationService, scheduleLocalNotification } from './notificationService';
+import i18n from '@/i18n';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'local';
 
@@ -17,10 +18,13 @@ export interface SessionUpdatedPayload {
 }
 
 export interface NoteUpdatedPayload {
+  noteId: string;
   date: string;
   content: string;
   author?: string;
   timestamp: number;
+  /** 'delete' means the note was removed on the other device. */
+  action: 'upsert' | 'delete';
 }
 
 export interface NotificationPayload {
@@ -326,22 +330,55 @@ class SyncService {
       }
       case 'NOTE_UPDATED': {
         const { date, content, author, timestamp } = msg;
-        await setNoteByDate(date, content);
-        this.noteListeners.forEach(listener => listener({ date, content, author, timestamp }));
+        // Servers before v3.1 key notes by date only; mint a local id for those.
+        const noteId: string = msg.noteId || `legacy_${date}`;
+
+        await upsertNote({ noteId, date, content, updatedAt: timestamp });
+        this.noteListeners.forEach(listener =>
+          listener({ noteId, date, content, author, timestamp, action: 'upsert' })
+        );
         this.syncListeners.forEach(listener => listener());
+
         if (author && author !== this.deviceId) {
-          this.notify('Günlük Not Güncellendi', `${date} için not güncellendi.`, 'note');
+          this.notify(i18n.t('notes'), `${date} — ${content.substring(0, 60)}`, 'note');
+        }
+        break;
+      }
+
+      case 'NOTE_DELETED': {
+        const { noteId, date, author, timestamp } = msg;
+        if (noteId) {
+          await deleteNote(noteId);
+          this.noteListeners.forEach(listener =>
+            listener({ noteId, date, content: '', author, timestamp, action: 'delete' })
+          );
+          this.syncListeners.forEach(listener => listener());
         }
         break;
       }
       case 'EVENT_UPDATED': {
         const { event, author } = msg;
         if (event) {
+          const previous = (await getAllEvents()).find(e => e.id === event.id);
+          const completionChanged =
+            Boolean(previous) && Boolean(previous!.completed) !== Boolean(event.completed);
+
           await saveEvent(event);
           this.eventListeners.forEach(listener => listener(event, 'upsert'));
           this.syncListeners.forEach(listener => listener());
+
           if (author && author !== this.deviceId) {
-            this.notify('Takvim Planı Eklendi', `"${event.title}" (${event.startDate})`, 'event');
+            if (completionChanged) {
+              this.notify(
+                event.completed ? i18n.t('completed') : i18n.t('notCompleted'),
+                i18n.t(event.completed ? 'partnerCompletedEvent' : 'partnerUncompletedEvent', {
+                  title: event.title,
+                }),
+                'event'
+              );
+            } else {
+              this.notify(i18n.t('scheduleUpdated'), `"${event.title}" (${event.startDate})`, 'event');
+            }
           }
         }
         break;
@@ -353,7 +390,7 @@ class SyncService {
           this.eventListeners.forEach(listener => listener({ id: eventId } as any, 'delete'));
           this.syncListeners.forEach(listener => listener());
           if (author && author !== this.deviceId) {
-            this.notify('Plan Silindi', 'Takvimden bir etkinlik silindi.', 'event');
+            this.notify(i18n.t('scheduleUpdated'), i18n.t('eventRemoved'), 'event');
           }
         }
         break;
@@ -381,7 +418,7 @@ class SyncService {
           await this.applyFullSyncToLocalDb(msg.entries);
         }
         if (Array.isArray(msg.notes)) {
-          await this.applyNotesSyncToLocalDb(msg.notes);
+          await bulkSetNotes(msg.notes);
         }
         if (Array.isArray(msg.events)) {
           await bulkSetEvents(msg.events);
@@ -439,22 +476,6 @@ class SyncService {
     }
   }
 
-  private async applyNotesSyncToLocalDb(notesList: Array<{ date: string; content: string }>) {
-    try {
-      await db.delete(notes);
-      for (const item of notesList) {
-        if (item.date && item.content) {
-          await db.insert(notes).values({
-            date: item.date,
-            content: item.content
-          });
-        }
-      }
-    } catch (e) {
-      console.error('Error applying notes sync to local SQLite:', e);
-    }
-  }
-
   // Send session counter update
   public async sendSessionUpdate(date: string, count: number) {
     if (!this.roomCode) return;
@@ -468,14 +489,29 @@ class SyncService {
     });
   }
 
-  // Send note update
-  public async sendNoteUpdate(date: string, content: string) {
+  // Send note create/update. `noteId` lets a day carry several notes; servers
+  // older than v3.1 ignore it and keep their single-note-per-day behaviour.
+  public async sendNoteUpdate(note: NoteItem) {
     if (!this.roomCode) return;
     this.sendWsMessage({
       type: 'UPDATE_NOTE',
       roomCode: this.roomCode,
+      noteId: note.noteId,
+      date: note.date,
+      content: note.content,
+      author: this.deviceId,
+      senderToken: notificationService.getPushToken(),
+    });
+  }
+
+  // Send note delete
+  public async sendNoteDelete(noteId: string, date: string) {
+    if (!this.roomCode) return;
+    this.sendWsMessage({
+      type: 'DELETE_NOTE',
+      roomCode: this.roomCode,
+      noteId,
       date,
-      content,
       author: this.deviceId,
       senderToken: notificationService.getPushToken(),
     });
@@ -545,7 +581,7 @@ class SyncService {
   public async createRoom(includeLocalData: boolean = true): Promise<{ success: boolean; roomCode?: string; error?: string }> {
     try {
       let initialEntries: Array<{ date: string; count: number }> = [];
-      let initialNotes: Array<{ date: string; content: string }> = [];
+      let initialNotes: Array<{ noteId: string; date: string; content: string }> = [];
       let initialEvents: CalendarEvent[] = [];
       let initialCounters: RelationshipCounter[] = [];
 
@@ -554,7 +590,7 @@ class SyncService {
         initialEntries = localSessions.map((s: { date: string; count: number }) => ({ date: s.date, count: s.count }));
 
         const localNotes = await getAllNotes();
-        initialNotes = localNotes.map(n => ({ date: n.date, content: n.content }));
+        initialNotes = localNotes.map(n => ({ noteId: n.noteId, date: n.date, content: n.content }));
 
         initialEvents = await getAllEvents();
         initialCounters = await getAllCounters();
@@ -612,7 +648,7 @@ class SyncService {
       await setSetting('room_code', formattedCode);
 
       if (Array.isArray(data.entries)) await this.applyFullSyncToLocalDb(data.entries);
-      if (Array.isArray(data.notes)) await this.applyNotesSyncToLocalDb(data.notes);
+      if (Array.isArray(data.notes)) await bulkSetNotes(data.notes);
       if (Array.isArray(data.events)) await bulkSetEvents(data.events);
       if (Array.isArray(data.counters)) await bulkSetCounters(data.counters);
 
@@ -639,7 +675,7 @@ class SyncService {
         const data = await res.json();
         if (data.success) {
           if (Array.isArray(data.entries)) await this.applyFullSyncToLocalDb(data.entries);
-          if (Array.isArray(data.notes)) await this.applyNotesSyncToLocalDb(data.notes);
+          if (Array.isArray(data.notes)) await bulkSetNotes(data.notes);
           if (Array.isArray(data.events)) await bulkSetEvents(data.events);
           if (Array.isArray(data.counters)) await bulkSetCounters(data.counters);
           this.syncListeners.forEach(listener => listener());
@@ -658,7 +694,7 @@ class SyncService {
       const entries = localSessions.map((s: { date: string; count: number }) => ({ date: s.date, count: s.count }));
 
       const localNotes = await getAllNotes();
-      const notesList = localNotes.map(n => ({ date: n.date, content: n.content }));
+      const notesList = localNotes.map(n => ({ noteId: n.noteId, date: n.date, content: n.content }));
 
       const eventsList = await getAllEvents();
       const countersList = await getAllCounters();
