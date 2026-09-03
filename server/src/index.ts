@@ -29,6 +29,7 @@ import { roomManager } from './rooms.js';
 import { ClientMessage, ServerMessage } from './types.js';
 import { sendExpoPushNotifications } from './push.js';
 import { authMiddleware, validateWsAuth } from './auth.js';
+import { startEventReminderScheduler } from './eventReminders.js';
 
 // Initialize Database
 initDb();
@@ -209,7 +210,7 @@ app.post('/api/rooms/:code/push-all', (req: Request, res: Response) => {
 app.post('/api/rooms/:code/register-push-token', (req: Request, res: Response) => {
   try {
     const { code } = req.params;
-    const { deviceId, pushToken, platform } = req.body;
+    const { deviceId, pushToken, platform, role, displayName } = req.body;
 
     if (!deviceId || !pushToken) {
       return res.status(400).json({ success: false, error: 'Missing deviceId or pushToken' });
@@ -220,7 +221,7 @@ app.post('/api/rooms/:code/register-push-token', (req: Request, res: Response) =
       return res.status(404).json({ success: false, error: 'Room not found' });
     }
 
-    upsertRoomPushToken(room.id, deviceId, pushToken, platform);
+    upsertRoomPushToken(room.id, deviceId, pushToken, platform, role, displayName);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -298,6 +299,32 @@ app.post('/api/test-push', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+const MONTHS_TR = [
+  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+];
+
+/** "2026-09-03" -> "3 Eylül". */
+function formatDate(date: string): string {
+  const [, month, day] = date.split('-').map(Number);
+  if (!month || !day) return date;
+  return `${day} ${MONTHS_TR[month - 1] ?? ''}`.trim();
+}
+
+function truncate(text: string, max: number): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+/** Human-readable "when" for a plan, used in push bodies. */
+function describeWhen(event: { startDate: string; endDate: string; isAllDay: boolean; startTime?: string }): string {
+  if (event.startDate !== event.endDate) {
+    return `${formatDate(event.startDate)} – ${formatDate(event.endDate)}`;
+  }
+  if (event.isAllDay || !event.startTime) return `${formatDate(event.startDate)} · tüm gün`;
+  return `${formatDate(event.startDate)} · ${event.startTime}`;
+}
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -437,8 +464,8 @@ wss.on('connection', (ws: WebSocket, req) => {
         const senderDevice = msg.author || client?.deviceId;
         const pushTokens = getRoomPushTokens(room.id, senderDevice, (msg as any).senderToken);
         sendExpoPushNotifications(pushTokens, {
-          title: '📝 Günlük Not Güncellendi',
-          body: `${msg.date} için not güncellendi: "${msg.content.substring(0, 50)}"`,
+          title: 'Yeni not',
+          body: `${formatDate(msg.date)} · ${truncate(msg.content, 80)}`,
           data: { roomCode: room.code, date: msg.date, noteId }
         });
         return;
@@ -492,18 +519,18 @@ wss.on('connection', (ws: WebSocket, req) => {
         const senderDevice = msg.author || client?.deviceId;
         const pushTokens = getRoomPushTokens(room.id, senderDevice, (msg as any).senderToken);
 
-        const pushBody = completionChanged
-          ? (msg.event.completed
-              ? `Partnerin "${msg.event.title}" planını tamamladı ✅`
-              : `Partnerin "${msg.event.title}" planını tamamlanmadı olarak işaretledi`)
+        const when = describeWhen(msg.event);
+        const pushTitle = completionChanged
+          ? (msg.event.completed ? 'Plan tamamlandı' : 'Plan yeniden açıldı')
           : isNew
-            ? `Partnerin "${msg.event.title}" planını ekledi (${msg.event.startDate})`
-            : `Partnerin "${msg.event.title}" planını güncelledi (${msg.event.startDate})`;
+            ? 'Yeni plan'
+            : 'Plan güncellendi';
+        const pushBody = completionChanged
+          ? `"${msg.event.title}" · ${when}`
+          : `"${msg.event.title}" · ${when}`;
 
         sendExpoPushNotifications(pushTokens, {
-          title: completionChanged
-            ? (msg.event.completed ? '✅ Plan Tamamlandı' : '↩️ Plan Geri Alındı')
-            : isNew ? '📅 Yeni Plan Eklendi' : '📅 Plan Güncellendi',
+          title: pushTitle,
           body: pushBody,
           data: { roomCode: room.code, eventId: msg.event.id, date: msg.event.startDate }
         });
@@ -532,8 +559,8 @@ wss.on('connection', (ws: WebSocket, req) => {
         const senderDevice = msg.author || client?.deviceId;
         const pushTokens = getRoomPushTokens(room.id, senderDevice, (msg as any).senderToken);
         sendExpoPushNotifications(pushTokens, {
-          title: '🗑️ Plan Silindi',
-          body: 'Takvimden bir etkinlik kaldırıldı.',
+          title: 'Plan silindi',
+          body: 'Takvimden bir plan kaldırıldı.',
           data: { roomCode: room.code }
         });
         return;
@@ -561,8 +588,8 @@ wss.on('connection', (ws: WebSocket, req) => {
         const senderDevice = msg.author || client?.deviceId;
         const pushTokens = getRoomPushTokens(room.id, senderDevice, (msg as any).senderToken);
         sendExpoPushNotifications(pushTokens, {
-          title: '⭐ Özel Gün Eklendi',
-          body: `Partnerin "${msg.counter.title}" sayacını ekledi (${msg.counter.targetDate})`,
+          title: 'Yeni özel gün',
+          body: `"${msg.counter.title}" · ${formatDate(msg.counter.targetDate)}`,
           data: { roomCode: room.code, counterId: msg.counter.id }
         });
         return;
@@ -603,6 +630,8 @@ wss.on('connection', (ws: WebSocket, req) => {
     roomManager.leaveRoom(ws);
   });
 });
+
+startEventReminderScheduler();
 
 server.listen(PORT, () => {
   console.log(`🚀 Microphone Check Calendar Server running on port ${PORT}`);

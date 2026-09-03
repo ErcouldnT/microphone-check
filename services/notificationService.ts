@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { getApiKey } from '@/db/settings';
+import { getApiKey, getMyName, getMyRole } from '@/db/settings';
 
 const DEFAULT_PROJECT_ID = 'f377d6e6-6992-46e0-878c-d96688e136a8';
 
@@ -119,6 +119,9 @@ class NotificationService {
 
       const cleanUrl = serverUrl.trim().replace(/\/+$/, '');
       const apiKey = await getApiKey();
+      // The server needs to know whose device this is so it can word an
+      // event-start push for its recipient and skip the plan's own owner.
+      const [role, displayName] = await Promise.all([getMyRole(), getMyName()]);
       const res = await fetch(`${cleanUrl}/api/rooms/${encodeURIComponent(roomCode)}/register-push-token`, {
         method: 'POST',
         headers: {
@@ -129,6 +132,8 @@ class NotificationService {
           deviceId,
           pushToken: token,
           platform: Platform.OS,
+          role,
+          displayName,
         }),
       });
 

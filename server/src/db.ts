@@ -84,6 +84,8 @@ export function initDb() {
       device_id TEXT NOT NULL,
       push_token TEXT NOT NULL,
       platform TEXT,
+      role TEXT,
+      display_name TEXT,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
       UNIQUE(room_id, device_id)
@@ -152,6 +154,23 @@ function runV31Migrations() {
   }
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_room_note ON room_notes(room_id, note_id);`);
+
+  // Knowing which person a device belongs to lets the server word an
+  // event-start push for its recipient ("Svetlana is doing this now") and skip
+  // the device whose own plan it is.
+  const tokenColumns = tableColumns('room_push_tokens');
+  if (tokenColumns.length > 0 && !tokenColumns.includes('role')) {
+    db.exec(`ALTER TABLE room_push_tokens ADD COLUMN role TEXT;`);
+    db.exec(`ALTER TABLE room_push_tokens ADD COLUMN display_name TEXT;`);
+    console.log('[migration] room_push_tokens.role/display_name added');
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sent_event_reminders (
+      id TEXT PRIMARY KEY,
+      sent_at INTEGER NOT NULL
+    );
+  `);
 }
 
 // Generate friendly 6-digit room code like MIC-8492
@@ -539,22 +558,82 @@ export function bulkUpsertRoomCounters(roomId: string, counters: RelationshipCou
 }
 
 // Push Notifications
-export function upsertRoomPushToken(roomId: string, deviceId: string, pushToken: string, platform?: string) {
+export function upsertRoomPushToken(
+  roomId: string,
+  deviceId: string,
+  pushToken: string,
+  platform?: string,
+  role?: string,
+  displayName?: string
+) {
   const now = Date.now();
   const id = crypto.randomUUID();
-  
+
   // Clean up any stale records with the same token to prevent duplicate sends across devices
   db.prepare('DELETE FROM room_push_tokens WHERE push_token = ?').run(pushToken);
 
   const stmt = db.prepare(`
-    INSERT INTO room_push_tokens (id, room_id, device_id, push_token, platform, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO room_push_tokens (id, room_id, device_id, push_token, platform, role, display_name, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(room_id, device_id) DO UPDATE SET
       push_token = excluded.push_token,
       platform = excluded.platform,
+      role = COALESCE(excluded.role, room_push_tokens.role),
+      display_name = COALESCE(excluded.display_name, room_push_tokens.display_name),
       updated_at = excluded.updated_at
   `);
-  stmt.run(id, roomId, deviceId, pushToken, platform || null, now);
+  stmt.run(id, roomId, deviceId, pushToken, platform || null, role || null, displayName || null, now);
+}
+
+export interface PushTarget {
+  deviceId: string;
+  pushToken: string;
+  role: string | null;
+  displayName: string | null;
+}
+
+/** Everyone registered in a room, with who each device belongs to. */
+export function getRoomPushTargets(roomId: string): PushTarget[] {
+  const rows = db
+    .prepare(
+      `SELECT device_id as deviceId, push_token as pushToken, role, display_name as displayName
+       FROM room_push_tokens WHERE room_id = ?`
+    )
+    .all(roomId) as PushTarget[];
+  return rows.filter(r => Boolean(r.pushToken));
+}
+
+/**
+ * Timed plans whose start time falls in the given minute, across every room.
+ * Used to notify the other person the moment a plan begins.
+ */
+export function getEventsStartingAt(date: string, time: string): Array<CalendarEvent & { roomId: string }> {
+  const rows = db
+    .prepare(
+      `SELECT id, room_id as roomId, title, start_date as startDate, end_date as endDate,
+              start_time as startTime, end_time as endTime, is_all_day as isAllDay,
+              color, target, completed, author
+       FROM room_events
+       WHERE start_date = ? AND start_time = ? AND is_all_day = 0 AND COALESCE(completed, 0) = 0`
+    )
+    .all(date, time) as any[];
+
+  return rows.map(r => ({ ...r, isAllDay: Boolean(r.isAllDay), completed: Boolean(r.completed) }));
+}
+
+/** Guards against sending the same start reminder twice. */
+export function markReminderSent(key: string): boolean {
+  try {
+    db.prepare('INSERT INTO sent_event_reminders (id, sent_at) VALUES (?, ?)').run(key, Date.now());
+    return true;
+  } catch {
+    return false; // already recorded
+  }
+}
+
+/** Drops reminder bookkeeping older than two days. */
+export function pruneReminderLog() {
+  db.prepare('DELETE FROM sent_event_reminders WHERE sent_at < ?').run(Date.now() - 2 * 86_400_000);
 }
 
 export function getRoomPushTokens(roomId: string, excludeDeviceId?: string, excludePushToken?: string): string[] {

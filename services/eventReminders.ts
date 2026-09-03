@@ -37,17 +37,30 @@ const getEventStart = (event: CalendarEvent): Date | null => {
   return start;
 };
 
-/**
- * Wording depends on whose plan it is: the partner's plans read
- * "your partner is doing this now", shared ones "your shared plan right now".
- */
-const getReminderBody = (event: CalendarEvent, myRole: UserRole): string => {
-  const partnerRole: UserRole = myRole === 'male' ? 'female' : 'male';
-  const isPartners = event.target === partnerRole || event.target === 'partner';
+/** When the plan runs, for the notification body. */
+const describeWindow = (event: CalendarEvent): string => {
+  if (event.isAllDay || !event.startTime) return String(i18n.t('allDay'));
+  return event.endTime ? `${event.startTime}–${event.endTime}` : event.startTime;
+};
 
-  if (event.target === 'both') return String(i18n.t('bothDoingNow', { title: event.title }));
-  if (isPartners) return String(i18n.t('partnerDoingNow', { title: event.title }));
-  return String(i18n.t('youDoingNow', { title: event.title }));
+const getReminderBody = (event: CalendarEvent): string =>
+  String(
+    i18n.t(event.target === 'both' ? 'bothDoingNow' : 'youDoingNow', {
+      title: event.title,
+      time: describeWindow(event),
+    })
+  );
+
+/**
+ * Whether this device should raise a local reminder for the plan.
+ *
+ * Only the person a plan belongs to (or both of them, for a shared plan) is
+ * reminded locally. Telling the other person that their partner just started
+ * something is the server's job, which keeps the two from doubling up.
+ */
+const isMine = (event: CalendarEvent, myRole: UserRole): boolean => {
+  if (event.target === 'both') return true;
+  return event.target === myRole || event.target === 'you';
 };
 
 /** Cancels every reminder previously scheduled by this module. */
@@ -85,7 +98,7 @@ export const rescheduleEventReminders = async (
     const now = Date.now();
 
     const upcoming = events
-      .filter(e => !e.completed)
+      .filter(e => !e.completed && isMine(e, role))
       .map(e => ({ event: e, start: getEventStart(e) }))
       .filter((x): x is { event: CalendarEvent; start: Date } => x.start !== null)
       .filter(x => x.start.getTime() > now)
@@ -96,7 +109,7 @@ export const rescheduleEventReminders = async (
       await Notifications.scheduleNotificationAsync({
         content: {
           title: String(i18n.t('happeningNow')),
-          body: getReminderBody(event, role),
+          body: getReminderBody(event),
           sound: 'default',
           data: {
             kind: EVENT_REMINDER_KIND,
