@@ -71,5 +71,7 @@ const withDarkPickerDialogs: ConfigPlugin = expoConfig =>
 /** app.json holds the static configuration; this layer adds code-only plugins. */
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...(config as ExpoConfig),
-  plugins: [...(config.plugins ?? []), withDarkPickerDialogs],
+  // Expo accepts plugin functions at runtime, but ExpoConfig's type only
+  // describes the string/array forms.
+  plugins: [...(config.plugins ?? []), withDarkPickerDialogs] as ExpoConfig['plugins'],
 });

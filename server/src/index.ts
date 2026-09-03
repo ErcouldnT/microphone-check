@@ -590,7 +590,7 @@ wss.on('connection', (ws: WebSocket, req) => {
         sendExpoPushNotifications(pushTokens, {
           title: 'Yeni özel gün',
           body: `"${msg.counter.title}" · ${formatDate(msg.counter.targetDate)}`,
-          data: { roomCode: room.code, counterId: msg.counter.id }
+          data: { roomCode: room.code, counterId: msg.counter.id, date: msg.counter.targetDate }
         });
         return;
       }

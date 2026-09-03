@@ -32,6 +32,8 @@ export interface NotificationPayload {
   title: string;
   message: string;
   type: 'event' | 'note' | 'counter';
+  /** Day the notice is about, so tapping it can open that day. */
+  date?: string;
   timestamp: number;
 }
 
@@ -307,16 +309,23 @@ class SyncService {
     }
   }
 
-  private notify(title: string, message: string, type: 'event' | 'note' | 'counter') {
+  private notify(
+    title: string,
+    message: string,
+    type: 'event' | 'note' | 'counter',
+    date?: string
+  ) {
     const payload: NotificationPayload = {
       id: Math.random().toString(36).substring(2, 9),
       title,
       message,
       type,
+      date,
       timestamp: Date.now()
     };
     this.notificationListeners.forEach(listener => listener(payload));
-    scheduleLocalNotification(title, message, { type });
+    // `date` rides along so tapping the notification opens that day.
+    scheduleLocalNotification(title, message, { type, date });
   }
 
   private async handleWsMessage(msg: any) {
@@ -340,7 +349,7 @@ class SyncService {
         this.syncListeners.forEach(listener => listener());
 
         if (author && author !== this.deviceId) {
-          this.notify(i18n.t('notes'), `${date} — ${content.substring(0, 60)}`, 'note');
+          this.notify(String(i18n.t('notes')), content.substring(0, 80), 'note', date);
         }
         break;
       }
@@ -374,10 +383,16 @@ class SyncService {
                 i18n.t(event.completed ? 'partnerCompletedEvent' : 'partnerUncompletedEvent', {
                   title: event.title,
                 }),
-                'event'
+                'event',
+                event.startDate
               );
             } else {
-              this.notify(i18n.t('scheduleUpdated'), `"${event.title}" (${event.startDate})`, 'event');
+              this.notify(
+                String(i18n.t('scheduleUpdated')),
+                `"${event.title}"`,
+                'event',
+                event.startDate
+              );
             }
           }
         }

@@ -1,0 +1,18 @@
+<lint-module
+    format="1"
+    dir="/Users/ercode/Code/microphone-check/modules/home-widget/android"
+    name=":home-widget"
+    type="LIBRARY"
+    maven="com.ercode.microphonecheck:home-widget:1.0.0"
+    agpVersion="8.11.0"
+    buildFolder="build"
+    bootClassPath="/Users/ercode/Library/Android/sdk/platforms/android-36/android.jar:/Users/ercode/Library/Android/sdk/build-tools/35.0.0/core-lambda-stubs.jar"
+    javaSourceLevel="17"
+    compileTarget="android-36"
+    neverShrinking="true">
+  <lintOptions
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>

@@ -1,0 +1,36 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:1:1-15:12
+INJECTED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:1:1-15:12
+	package
+		INJECTED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:1:11-69
+application
+ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:2:3-14:17
+receiver#expo.modules.homewidget.TodayPlanWidgetProvider
+ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:4:5-13:16
+	android:exported
+		ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:6:7-31
+	android:name
+		ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:5:7-69
+intent-filter#action:name:android.appwidget.action.APPWIDGET_UPDATE
+ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:7:7-9:23
+action#android.appwidget.action.APPWIDGET_UPDATE
+ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:8:9-76
+	android:name
+		ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:8:17-73
+meta-data#android.appwidget.provider
+ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:10:7-12:58
+	android:resource
+		ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:12:9-55
+	android:name
+		ADDED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:11:9-50
+uses-sdk
+INJECTED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml
+INJECTED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml

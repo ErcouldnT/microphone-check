@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GestureResponderEvent,
   LayoutChangeEvent,
@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
 import { getCountersForDate } from '@/db/counters';
-import { getLocalDateString } from '@/utils/date';
+import { getLocalDateString, parseLocalDate } from '@/utils/date';
 import { resolveTarget } from '@/utils/labels';
 import { useCalendarData } from '@/components/CalendarDataProvider';
 import DayActionModal, { ActionTab } from '@/components/DayActionModal';
@@ -56,12 +56,21 @@ export default function CalendarScreen() {
   const [rangeStart, setRangeStart] = useState<string | null>(null);
   const [rangeEnd, setRangeEnd] = useState<string | null>(null);
   const gridLayout = useRef({ x: 0, y: 0, width: 0 });
-  const dayCells = useRef<string[]>([]);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTab, setModalTab] = useState<ActionTab>('event');
   const [eventToEdit, setEventToEdit] = useState<CalendarEvent | null>(null);
   const [pendingRange, setPendingRange] = useState<{ start: string; end: string } | null>(null);
+
+  // A notification tap (or any other jump request) lands here.
+  useEffect(() => {
+    if (!data.focusRequest) return;
+    const { date } = data.focusRequest;
+    setSelectedDate(date);
+    setCurrentDate(parseLocalDate(date));
+    setViewMode('day');
+    clearSelection();
+  }, [data.focusRequest]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -87,7 +96,6 @@ export default function CalendarScreen() {
     for (let d = 1; d <= daysInMonth; d += 1) {
       cells.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
     }
-    dayCells.current = cells.filter((c): c is string => c !== null);
     return cells;
   }, [year, month, daysInMonth, firstWeekday]);
 

@@ -1,0 +1,33 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="expo.modules.homewidget" >
+4
+5    <uses-sdk android:minSdkVersion="24" />
+6
+7    <application>
+7-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:2:3-14:17
+8
+9        <!-- Home screen widget showing what is still planned for today. -->
+10        <receiver
+10-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:4:5-13:16
+11            android:name="expo.modules.homewidget.TodayPlanWidgetProvider"
+11-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:5:7-69
+12            android:exported="false" >
+12-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:6:7-31
+13            <intent-filter>
+13-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:7:7-9:23
+14                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+14-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:8:9-76
+14-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:8:17-73
+15            </intent-filter>
+16
+17            <meta-data
+17-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:10:7-12:58
+18                android:name="android.appwidget.provider"
+18-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:11:9-50
+19                android:resource="@xml/today_plan_widget_info" />
+19-->/Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/AndroidManifest.xml:12:9-55
+20        </receiver>
+21    </application>
+22
+23</manifest>

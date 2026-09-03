@@ -1,0 +1,18 @@
+expo.modules.homewidget
+drawable widget_bg
+id row_color
+id row_target
+id row_time
+id row_title
+id widget_date
+id widget_empty
+id widget_list
+id widget_more_text
+id widget_root
+layout widget_today_plan
+layout widget_today_plan_more
+layout widget_today_plan_row
+string widget_description
+string widget_no_plan_today
+string widget_today_plan_title
+xml today_plan_widget_info

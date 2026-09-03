@@ -11,6 +11,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { ToastProvider } from '@/components/ui/Toast';
 import SyncToastBridge from '@/components/SyncToastBridge';
 import { CalendarDataProvider } from '@/components/CalendarDataProvider';
+import NotificationRouter from '@/components/NotificationRouter';
 import { initDb } from '@/db/client';
 import { syncService } from '@/services/syncService';
 
@@ -90,6 +91,7 @@ function RootLayoutNav() {
       <ToastProvider>
         <CalendarDataProvider>
           <SyncToastBridge />
+          <NotificationRouter />
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           </Stack>

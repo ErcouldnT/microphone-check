@@ -1,0 +1,22 @@
+[
+    {
+        "merged": "expo.modules.homewidget.home-widget-release-10:/drawable/widget_bg.xml",
+        "source": "expo.modules.homewidget.home-widget-main-11:/drawable/widget_bg.xml"
+    },
+    {
+        "merged": "expo.modules.homewidget.home-widget-release-10:/drawable/notification_tile_bg.xml",
+        "source": "expo.modules.homewidget.home-widget-core-1.13.1-5:/drawable/notification_tile_bg.xml"
+    },
+    {
+        "merged": "expo.modules.homewidget.home-widget-release-10:/drawable/notification_icon_background.xml",
+        "source": "expo.modules.homewidget.home-widget-core-1.13.1-5:/drawable/notification_icon_background.xml"
+    },
+    {
+        "merged": "expo.modules.homewidget.home-widget-release-10:/drawable/notification_bg_low.xml",
+        "source": "expo.modules.homewidget.home-widget-core-1.13.1-5:/drawable/notification_bg_low.xml"
+    },
+    {
+        "merged": "expo.modules.homewidget.home-widget-release-10:/drawable/notification_bg.xml",
+        "source": "expo.modules.homewidget.home-widget-core-1.13.1-5:/drawable/notification_bg.xml"
+    }
+]

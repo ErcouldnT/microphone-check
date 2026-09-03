@@ -1,0 +1,14 @@
+expo.modules.homewidget.home-widget-core-runtime-2.2.0-0 /Users/ercode/.gradle/caches/8.14.3/transforms/1513fa43d142e29281da9bb20cb62464/transformed/core-runtime-2.2.0/res
+expo.modules.homewidget.home-widget-annotation-experimental-1.4.0-1 /Users/ercode/.gradle/caches/8.14.3/transforms/6e7e5b91fa5220ea44a0e53ffe19faca/transformed/annotation-experimental-1.4.0/res
+expo.modules.homewidget.home-widget-profileinstaller-1.3.0-2 /Users/ercode/.gradle/caches/8.14.3/transforms/940523d3a7f57b4c54c28bcfcc19c0f4/transformed/profileinstaller-1.3.0/res
+expo.modules.homewidget.home-widget-core-ktx-1.13.1-3 /Users/ercode/.gradle/caches/8.14.3/transforms/940ae0451a72cf388277b35445b0bea3/transformed/core-ktx-1.13.1/res
+expo.modules.homewidget.home-widget-lifecycle-runtime-2.6.2-4 /Users/ercode/.gradle/caches/8.14.3/transforms/9ff45c7c9d4445c22ed35c7b09d82224/transformed/lifecycle-runtime-2.6.2/res
+expo.modules.homewidget.home-widget-core-1.13.1-5 /Users/ercode/.gradle/caches/8.14.3/transforms/c034a5d3ab96620308518d6bce440e29/transformed/core-1.13.1/res
+expo.modules.homewidget.home-widget-startup-runtime-1.1.1-6 /Users/ercode/.gradle/caches/8.14.3/transforms/f8ea9941de77e3a11cb94313598098ed/transformed/startup-runtime-1.1.1/res
+expo.modules.homewidget.home-widget-pngs-7 /Users/ercode/Code/microphone-check/modules/home-widget/android/build/generated/res/pngs/release
+expo.modules.homewidget.home-widget-resValues-8 /Users/ercode/Code/microphone-check/modules/home-widget/android/build/generated/res/resValues/release
+expo.modules.homewidget.home-widget-mergeReleaseResources-9 /Users/ercode/Code/microphone-check/modules/home-widget/android/build/intermediates/incremental/release/mergeReleaseResources/merged.dir
+expo.modules.homewidget.home-widget-mergeReleaseResources-10 /Users/ercode/Code/microphone-check/modules/home-widget/android/build/intermediates/incremental/release/mergeReleaseResources/stripped.dir
+expo.modules.homewidget.home-widget-release-11 /Users/ercode/Code/microphone-check/modules/home-widget/android/build/intermediates/merged_res/release/mergeReleaseResources
+expo.modules.homewidget.home-widget-main-12 /Users/ercode/Code/microphone-check/modules/home-widget/android/src/main/res
+expo.modules.homewidget.home-widget-release-13 /Users/ercode/Code/microphone-check/modules/home-widget/android/src/release/res

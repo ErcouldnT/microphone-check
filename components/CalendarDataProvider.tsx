@@ -41,6 +41,13 @@ import { ConnectionStatus, syncService } from '@/services/syncService';
 import { rescheduleEventReminders } from '@/services/eventReminders';
 import { publishTodayPlanToWidgets } from '@/services/widgetSync';
 
+/** A request to bring a particular day into view, e.g. from a notification. */
+export interface FocusRequest {
+  date: string;
+  /** Distinguishes repeat requests for the same day. */
+  nonce: number;
+}
+
 export interface CalendarData {
   // Data
   events: CalendarEvent[];
@@ -56,6 +63,10 @@ export interface CalendarData {
   // Sync
   syncStatus: ConnectionStatus;
   roomCode: string | null;
+
+  /** Set when something asks the calendar to jump to a day. */
+  focusRequest: FocusRequest | null;
+  requestFocusDate: (date: string) => void;
 
   // Actions
   reload: () => Promise<void>;
@@ -102,6 +113,12 @@ export function CalendarDataProvider({ children }: { children: ReactNode }) {
 
   const [syncStatus, setSyncStatus] = useState<ConnectionStatus>('local');
   const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+
+  const requestFocusDate = useCallback((date: string) => {
+    if (!date) return;
+    setFocusRequest({ date, nonce: Date.now() });
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -306,6 +323,8 @@ export function CalendarDataProvider({ children }: { children: ReactNode }) {
       partnerName,
       syncStatus,
       roomCode,
+      focusRequest,
+      requestFocusDate,
       reload,
       saveCalendarEvent,
       removeCalendarEvent,
@@ -326,6 +345,8 @@ export function CalendarDataProvider({ children }: { children: ReactNode }) {
       partnerName,
       syncStatus,
       roomCode,
+      focusRequest,
+      requestFocusDate,
       reload,
       saveCalendarEvent,
       removeCalendarEvent,

@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "expo.modules.homewidget.home-widget-release-10:/drawable-v21/notification_action_background.xml",
+        "source": "expo.modules.homewidget.home-widget-core-1.13.1-5:/drawable-v21/notification_action_background.xml"
+    }
+]
