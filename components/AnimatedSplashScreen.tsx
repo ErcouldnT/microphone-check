@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -23,6 +23,13 @@ const RING_COUNT = 3;
 const RING_BASE_SIZE = 200;
 
 /**
+ * Shortest time the animation stays up. Startup is fast enough that without a
+ * floor the splash can flash past before it has drawn anything, which reads as
+ * a black blink between the native splash and the first screen.
+ */
+const MIN_VISIBLE_MS = 1300;
+
+/**
  * Launch screen.
  *
  * The glow is built from concentric rings that expand and fade rather than a
@@ -33,6 +40,7 @@ export default function AnimatedSplashScreen({
   isReady,
   onAnimationComplete,
 }: AnimatedSplashScreenProps) {
+  const mountedAt = useRef(Date.now());
   const fade = useSharedValue(1);
   const logoScale = useSharedValue(0.62);
   const logoLift = useSharedValue(18);
@@ -78,12 +86,15 @@ export default function AnimatedSplashScreen({
 
     // Ease out by pushing the mark slightly toward the viewer, so the splash
     // reads as opening into the app rather than simply disappearing.
+    const elapsed = Date.now() - mountedAt.current;
+    const wait = Math.max(MIN_VISIBLE_MS - elapsed, 120);
+
     const timer = setTimeout(() => {
       exitScale.value = withTiming(1.08, { duration: 460, easing: Easing.in(Easing.cubic) });
       fade.value = withTiming(0, { duration: 420, easing: Easing.in(Easing.quad) }, finished => {
         if (finished && onAnimationComplete) runOnJS(onAnimationComplete)();
       });
-    }, 420);
+    }, wait);
 
     return () => clearTimeout(timer);
   }, [isReady, exitScale, fade, onAnimationComplete]);

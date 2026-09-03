@@ -8,11 +8,6 @@
     "scheme": "microphonecheck",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#050508"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ercode.microphonecheck",
@@ -43,6 +38,19 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 150,
+          "resizeMode": "contain",
+          "backgroundColor": "#050508",
+          "dark": {
+            "image": "./assets/images/splash-icon.png",
+            "backgroundColor": "#050508"
+          }
+        }
+      ],
       "expo-localization",
       [
         "expo-notifications",
