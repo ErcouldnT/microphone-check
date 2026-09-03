@@ -44,11 +44,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 150,
           "resizeMode": "contain",
-          "backgroundColor": "#050508",
-          "dark": {
-            "image": "./assets/images/splash-icon.png",
-            "backgroundColor": "#050508"
-          }
+          "backgroundColor": "#050508"
         }
       ],
       "expo-localization",
