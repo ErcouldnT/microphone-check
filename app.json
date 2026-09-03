@@ -18,7 +18,10 @@
       },
       "appleTeamId": "5QWR5WX9N7",
       "userInterfaceStyle": "dark",
-      "icon": "./assets/images/icon-ios.png"
+      "icon": "./assets/images/icon-ios.png",
+      "infoPlist": {
+        "CFBundleName": "Microphone Check!"
+      }
     },
     "android": {
       "adaptiveIcon": {
