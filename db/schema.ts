@@ -35,6 +35,9 @@ export const events = sqliteTable("events", {
     color: text("color").notNull(),          // Hex code e.g. #00FFFF, #FF007F, #FACC15
     target: text("target").notNull(),        // 'you', 'partner', 'both'
     completed: integer("completed").default(0), // 0 = pending, 1 = done
+    // IANA zone the wall-clock time was written in, so an instant can be
+    // resolved without guessing. Nullable for rows that predate it.
+    timezone: text("timezone"),
     author: text("author"),
     createdAt: integer("created_at").$defaultFn(() => Date.now()),
     updatedAt: integer("updated_at").$defaultFn(() => Date.now()),

@@ -32,6 +32,8 @@ export interface CalendarEvent {
   target: 'you' | 'partner' | 'both';
   /** Whether the plan has been carried out. */
   completed?: boolean;
+  /** IANA zone the wall-clock times were entered in. */
+  timezone?: string;
   author?: string;
   updatedAt?: number;
 }

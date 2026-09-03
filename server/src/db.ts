@@ -62,6 +62,7 @@ export function initDb() {
       color TEXT NOT NULL,
       target TEXT NOT NULL,
       completed INTEGER NOT NULL DEFAULT 0,
+      timezone TEXT,
       author TEXT,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
@@ -86,6 +87,7 @@ export function initDb() {
       platform TEXT,
       role TEXT,
       display_name TEXT,
+      timezone TEXT,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
       UNIQUE(room_id, device_id)
@@ -153,6 +155,11 @@ function runV31Migrations() {
     console.log('[migration] room_events.completed added');
   }
 
+  if (eventColumns.length > 0 && !eventColumns.includes('timezone')) {
+    db.exec(`ALTER TABLE room_events ADD COLUMN timezone TEXT;`);
+    console.log('[migration] room_events.timezone added');
+  }
+
   db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_room_note ON room_notes(room_id, note_id);`);
 
   // Knowing which person a device belongs to lets the server word an
@@ -163,6 +170,13 @@ function runV31Migrations() {
     db.exec(`ALTER TABLE room_push_tokens ADD COLUMN role TEXT;`);
     db.exec(`ALTER TABLE room_push_tokens ADD COLUMN display_name TEXT;`);
     console.log('[migration] room_push_tokens.role/display_name added');
+  }
+
+  // Plans are stored in the couple's local wall-clock time, so the scheduler
+  // has to evaluate them in that zone rather than the server's.
+  if (tokenColumns.length > 0 && !tokenColumns.includes('timezone')) {
+    db.exec(`ALTER TABLE room_push_tokens ADD COLUMN timezone TEXT;`);
+    console.log('[migration] room_push_tokens.timezone added');
   }
 
   db.exec(`
@@ -370,7 +384,7 @@ export function getRoomEvents(roomId: string): CalendarEvent[] {
   const stmt = db.prepare(`
     SELECT id, room_id as roomId, title, description, start_date as startDate, end_date as endDate,
            start_time as startTime, end_time as endTime, is_all_day as isAllDay, color, target,
-           completed, author, updated_at as updatedAt
+           completed, timezone, author, updated_at as updatedAt
     FROM room_events
     WHERE room_id = ?
     ORDER BY start_date ASC, start_time ASC
@@ -389,6 +403,7 @@ export function getRoomEvents(roomId: string): CalendarEvent[] {
     color: r.color,
     target: r.target,
     completed: Boolean(r.completed),
+    timezone: r.timezone || undefined,
     author: r.author || undefined,
     updatedAt: r.updatedAt,
   }));
@@ -399,8 +414,8 @@ export function upsertRoomEvent(roomId: string, event: CalendarEvent, author?: s
   touchRoom(roomId);
 
   const stmt = db.prepare(`
-    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, completed, author, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, completed, timezone, author, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       description = excluded.description,
@@ -412,6 +427,7 @@ export function upsertRoomEvent(roomId: string, event: CalendarEvent, author?: s
       color = excluded.color,
       target = excluded.target,
       completed = excluded.completed,
+      timezone = COALESCE(excluded.timezone, room_events.timezone),
       author = excluded.author,
       updated_at = excluded.updated_at
   `);
@@ -429,6 +445,7 @@ export function upsertRoomEvent(roomId: string, event: CalendarEvent, author?: s
     event.color,
     event.target,
     event.completed ? 1 : 0,
+    event.timezone || null,
     author || event.author || null,
     now
   );
@@ -447,8 +464,8 @@ export function bulkUpsertRoomEvents(roomId: string, events: CalendarEvent[]) {
   touchRoom(roomId);
 
   const stmt = db.prepare(`
-    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, completed, author, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO room_events (id, room_id, title, description, start_date, end_date, start_time, end_time, is_all_day, color, target, completed, timezone, author, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       description = excluded.description,
@@ -460,6 +477,7 @@ export function bulkUpsertRoomEvents(roomId: string, events: CalendarEvent[]) {
       color = excluded.color,
       target = excluded.target,
       completed = excluded.completed,
+      timezone = COALESCE(excluded.timezone, room_events.timezone),
       author = excluded.author,
       updated_at = excluded.updated_at
   `);
@@ -479,6 +497,7 @@ export function bulkUpsertRoomEvents(roomId: string, events: CalendarEvent[]) {
         e.color,
         e.target,
         e.completed ? 1 : 0,
+        e.timezone || null,
         e.author || null,
         now
       );
@@ -564,7 +583,8 @@ export function upsertRoomPushToken(
   pushToken: string,
   platform?: string,
   role?: string,
-  displayName?: string
+  displayName?: string,
+  timezone?: string
 ) {
   const now = Date.now();
   const id = crypto.randomUUID();
@@ -573,16 +593,20 @@ export function upsertRoomPushToken(
   db.prepare('DELETE FROM room_push_tokens WHERE push_token = ?').run(pushToken);
 
   const stmt = db.prepare(`
-    INSERT INTO room_push_tokens (id, room_id, device_id, push_token, platform, role, display_name, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO room_push_tokens (id, room_id, device_id, push_token, platform, role, display_name, timezone, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(room_id, device_id) DO UPDATE SET
       push_token = excluded.push_token,
       platform = excluded.platform,
       role = COALESCE(excluded.role, room_push_tokens.role),
       display_name = COALESCE(excluded.display_name, room_push_tokens.display_name),
+      timezone = COALESCE(excluded.timezone, room_push_tokens.timezone),
       updated_at = excluded.updated_at
   `);
-  stmt.run(id, roomId, deviceId, pushToken, platform || null, role || null, displayName || null, now);
+  stmt.run(
+    id, roomId, deviceId, pushToken, platform || null,
+    role || null, displayName || null, timezone || null, now
+  );
 }
 
 export interface PushTarget {
@@ -590,33 +614,56 @@ export interface PushTarget {
   pushToken: string;
   role: string | null;
   displayName: string | null;
+  timezone: string | null;
 }
 
 /** Everyone registered in a room, with who each device belongs to. */
 export function getRoomPushTargets(roomId: string): PushTarget[] {
   const rows = db
     .prepare(
-      `SELECT device_id as deviceId, push_token as pushToken, role, display_name as displayName
+      `SELECT device_id as deviceId, push_token as pushToken, role,
+              display_name as displayName, timezone
        FROM room_push_tokens WHERE room_id = ?`
     )
     .all(roomId) as PushTarget[];
   return rows.filter(r => Boolean(r.pushToken));
 }
 
+/** Rooms that have at least one registered device, with that room's timezone. */
+export function getRoomsWithPushTargets(): Array<{ roomId: string; timezone: string | null }> {
+  const rows = db
+    .prepare(
+      `SELECT room_id as roomId, MAX(timezone) as timezone
+       FROM room_push_tokens
+       GROUP BY room_id`
+    )
+    .all() as Array<{ roomId: string; timezone: string | null }>;
+  return rows;
+}
+
 /**
- * Timed plans whose start time falls in the given minute, across every room.
- * Used to notify the other person the moment a plan begins.
+ * Timed plans in one room whose start time falls in the given minute.
+ *
+ * The date and time are the room's own wall clock, not the server's — plans
+ * are stored as local times, so evaluating them against the server's clock
+ * fired them off by the UTC offset.
  */
-export function getEventsStartingAt(date: string, time: string): Array<CalendarEvent & { roomId: string }> {
+export function getRoomTimedEventsBetween(
+  roomId: string,
+  fromDate: string,
+  toDate: string
+): Array<CalendarEvent & { roomId: string }> {
   const rows = db
     .prepare(
       `SELECT id, room_id as roomId, title, start_date as startDate, end_date as endDate,
               start_time as startTime, end_time as endTime, is_all_day as isAllDay,
-              color, target, completed, author
+              color, target, completed, timezone, author
        FROM room_events
-       WHERE start_date = ? AND start_time = ? AND is_all_day = 0 AND COALESCE(completed, 0) = 0`
+       WHERE room_id = ? AND start_date BETWEEN ? AND ?
+         AND is_all_day = 0 AND start_time IS NOT NULL
+         AND COALESCE(completed, 0) = 0`
     )
-    .all(date, time) as any[];
+    .all(roomId, fromDate, toDate) as any[];
 
   return rows.map(r => ({ ...r, isAllDay: Boolean(r.isAllDay), completed: Boolean(r.completed) }));
 }

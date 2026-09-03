@@ -15,6 +15,8 @@ export interface CalendarEvent {
   target: 'male' | 'female' | 'both' | 'you' | 'partner';
   /** Whether the plan has been carried out. Defaults to false. */
   completed?: boolean;
+  /** IANA zone the times were entered in, e.g. "Europe/Istanbul". */
+  timezone?: string;
   author?: string;
   createdAt?: number;
   updatedAt?: number;
@@ -35,6 +37,7 @@ export const getAllEvents = async (): Promise<CalendarEvent[]> => {
       color: e.color,
       target: e.target as 'you' | 'partner' | 'both',
       completed: Boolean(e.completed),
+      timezone: e.timezone ?? undefined,
       author: e.author ?? undefined,
       createdAt: e.createdAt ?? undefined,
       updatedAt: e.updatedAt ?? undefined,
@@ -71,6 +74,7 @@ export const saveEvent = async (event: CalendarEvent): Promise<void> => {
         color: event.color,
         target: event.target,
         completed: event.completed ? 1 : 0,
+        timezone: event.timezone ?? null,
         author: event.author ?? null,
         updatedAt: now,
       }).where(eq(events.id, event.id));
@@ -87,6 +91,7 @@ export const saveEvent = async (event: CalendarEvent): Promise<void> => {
         color: event.color,
         target: event.target,
         completed: event.completed ? 1 : 0,
+        timezone: event.timezone ?? null,
         author: event.author ?? null,
         createdAt: event.createdAt ?? now,
         updatedAt: now,
@@ -146,6 +151,7 @@ export const setEventCompleted = async (
       color: e.color,
       target: e.target as 'you' | 'partner' | 'both',
       completed,
+      timezone: e.timezone ?? undefined,
       author: e.author ?? undefined,
       createdAt: e.createdAt ?? undefined,
       updatedAt: now,

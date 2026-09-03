@@ -210,7 +210,7 @@ app.post('/api/rooms/:code/push-all', (req: Request, res: Response) => {
 app.post('/api/rooms/:code/register-push-token', (req: Request, res: Response) => {
   try {
     const { code } = req.params;
-    const { deviceId, pushToken, platform, role, displayName } = req.body;
+    const { deviceId, pushToken, platform, role, displayName, timezone } = req.body;
 
     if (!deviceId || !pushToken) {
       return res.status(400).json({ success: false, error: 'Missing deviceId or pushToken' });
@@ -221,7 +221,7 @@ app.post('/api/rooms/:code/register-push-token', (req: Request, res: Response) =
       return res.status(404).json({ success: false, error: 'Room not found' });
     }
 
-    upsertRoomPushToken(room.id, deviceId, pushToken, platform, role, displayName);
+    upsertRoomPushToken(room.id, deviceId, pushToken, platform, role, displayName, timezone);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });

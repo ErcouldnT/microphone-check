@@ -40,6 +40,7 @@ import {
 import { ConnectionStatus, syncService } from '@/services/syncService';
 import { rescheduleEventReminders } from '@/services/eventReminders';
 import { publishTodayPlanToWidgets } from '@/services/widgetSync';
+import { getDeviceTimezone } from '@/utils/timezone';
 
 /** A request to bring a particular day into view, e.g. from a notification. */
 export interface FocusRequest {
@@ -196,6 +197,9 @@ export function CalendarDataProvider({ children }: { children: ReactNode }) {
         color: eventData.color,
         target: eventData.target,
         completed: eventData.completed ?? false,
+        // Recorded so the server can tell when the plan actually starts
+        // without assuming both people share a timezone.
+        timezone: eventData.timezone ?? getDeviceTimezone(),
         author: syncService.getDeviceId(),
         updatedAt: Date.now(),
       };
