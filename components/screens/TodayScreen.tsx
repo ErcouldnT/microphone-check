@@ -13,6 +13,7 @@ import { useCalendarData } from '@/components/CalendarDataProvider';
 import DayActionModal, { ActionTab } from '@/components/DayActionModal';
 import RelationshipCounterStrip from '@/components/RelationshipCounterStrip';
 import SyncStatusPill from '@/components/SyncStatusPill';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 import EventCompletionToggle from '@/components/EventCompletionToggle';
 import {
   AddIcon,
@@ -74,16 +75,11 @@ export default function TodayScreen() {
   return (
     <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-        {/* Header */}
-        <View className="flex-row justify-between items-start mb-5">
-          <View className="flex-1 mr-3">
-            <Text className="text-neonCyan text-xs font-extrabold uppercase tracking-widest">
-              {i18n.t('today')}
-            </Text>
-            <Text className="text-white text-2xl font-extrabold mt-0.5">{formattedDate}</Text>
-          </View>
-          <SyncStatusPill />
-        </View>
+        <ScreenHeader
+          eyebrow={String(i18n.t('today'))}
+          title={formattedDate}
+          action={<SyncStatusPill />}
+        />
 
         {/* Milestones */}
         <RelationshipCounterStrip />

@@ -7,6 +7,7 @@ import { UserRole, setMyName, setMyRole, setPartnerName } from '@/db/settings';
 import { useCalendarData } from '@/components/CalendarDataProvider';
 import { useToast } from '@/components/ui/Toast';
 import PairingModal from '@/components/PairingModal';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 import {
   CalendarIcon,
   HeartIcon,
@@ -118,7 +119,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-        <Text className="text-white text-2xl font-extrabold mb-5">{i18n.t('settings')}</Text>
+        <ScreenHeader title={String(i18n.t('settings'))} />
 
         <Section
           title={String(i18n.t('profile'))}

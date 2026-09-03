@@ -144,7 +144,7 @@ export default function AnimatedSplashScreen({
       <Animated.View style={titleStyle}>
         <View style={styles.titleRow}>
           <Text style={[styles.title, styles.titleCyan]}>MICROPHONE</Text>
-          <Text style={[styles.title, styles.titlePink]}>CHECK</Text>
+          <Text style={[styles.title, styles.titlePink]}>CHECK!</Text>
         </View>
       </Animated.View>
 

@@ -21,6 +21,7 @@ import DaySchedule from '@/components/DaySchedule';
 import WeekAgenda from '@/components/WeekAgenda';
 import DayTimeline from '@/components/DayTimeline';
 import SyncStatusPill from '@/components/SyncStatusPill';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 import {
   AddIcon,
   CloseIcon,
@@ -188,10 +189,7 @@ export default function CalendarScreen() {
   return (
     <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-        <View className="flex-row justify-between items-center mb-4">
-          <Text className="text-white text-xl font-extrabold">{i18n.t('calendar')}</Text>
-          <SyncStatusPill />
-        </View>
+        <ScreenHeader title={String(i18n.t('calendar'))} action={<SyncStatusPill />} />
 
         {/* View switcher */}
         <View className="flex-row bg-gray-950 border border-gray-800 p-1 rounded-2xl mb-3">

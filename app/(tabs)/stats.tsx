@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { syncService } from '@/services/syncService';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 import { getAllNotes, setNoteByDate } from '@/db/notes';
 import { getAllEvents, saveEvent } from '@/db/events';
 import { getAllCounters, saveCounter } from '@/db/counters';
@@ -221,8 +222,8 @@ export default function StatsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-black" edges={['top', 'left', 'right']}>
-      <ScrollView className="p-4">
-        <Text className="text-3xl text-white font-bold mb-6 mt-4">{i18n.t('stats')}</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+        <ScreenHeader title={String(i18n.t('stats'))} />
 
         {/* Summary Cards */}
         <View className="flex-row flex-wrap justify-between mb-6">
@@ -245,7 +246,7 @@ export default function StatsScreen() {
         </View>
 
         {/* Recent List */}
-        <Text className="text-xl text-white font-bold mb-4">{i18n.t('recentRecords')}</Text>
+        <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-3">{i18n.t('recentRecords')}</Text>
         {recentSessions.map((s) => {
           const d = new Date(s.date);
           const day = d.getDate();
@@ -270,7 +271,7 @@ export default function StatsScreen() {
 
         {/* Data Management Section */}
         <View className="mt-8 mb-8">
-          <Text className="text-xl text-white font-bold mb-4">{i18n.t('dataManagement')}</Text>
+          <Text className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-3">{i18n.t('dataManagement')}</Text>
           <View className="flex-row justify-between">
             <TouchableOpacity
               onPress={handleExport}
