@@ -48,3 +48,19 @@ export const getRemainingEventsForDay = (
   dateStr: string,
   now: Date = new Date()
 ): CalendarEvent[] => getEventsForDay(events, dateStr).filter(e => !isEventFinished(e, dateStr, now));
+
+/**
+ * Plans from earlier days that were never ticked off.
+ *
+ * Deliberately not moved forward automatically: rewriting the date would
+ * destroy the record of when something was actually planned, makes no sense
+ * for a plan tied to an occasion, and in a shared calendar two devices would
+ * race each other doing it. The person decides what happens to each one.
+ */
+export const getMissedEvents = (
+  events: CalendarEvent[],
+  todayStr: string
+): CalendarEvent[] =>
+  events
+    .filter(e => !e.completed && e.endDate < todayStr)
+    .sort((a, b) => b.startDate.localeCompare(a.startDate) || byStartTime(a, b));

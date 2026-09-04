@@ -12,6 +12,7 @@ import { colorForTarget, getPersonLabels, resolveTarget } from '@/utils/labels';
 import { useCalendarData } from '@/components/CalendarDataProvider';
 import DayActionModal, { ActionTab } from '@/components/DayActionModal';
 import RelationshipCounterStrip from '@/components/RelationshipCounterStrip';
+import MissedPlansCard from '@/components/MissedPlansCard';
 import SyncStatusPill from '@/components/SyncStatusPill';
 import ScreenHeader from '@/components/ui/ScreenHeader';
 import EventCompletionToggle from '@/components/EventCompletionToggle';
@@ -83,6 +84,9 @@ export default function TodayScreen() {
 
         {/* Milestones */}
         <RelationshipCounterStrip />
+
+        {/* Anything left undone from earlier days */}
+        <MissedPlansCard today={today} />
 
         {/* Remaining plans */}
         <View className="bg-gray-950 border border-gray-800 rounded-3xl p-4 mb-4">
