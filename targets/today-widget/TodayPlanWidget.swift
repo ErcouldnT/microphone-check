@@ -147,7 +147,6 @@ struct TodayPlanWidgetView: View {
 
 // MARK: - Widget
 
-@main
 struct TodayPlanWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: "TodayPlanWidget", provider: TodayPlanProvider()) { entry in

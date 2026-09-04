@@ -40,6 +40,7 @@ import {
 import { ConnectionStatus, syncService } from '@/services/syncService';
 import { rescheduleEventReminders } from '@/services/eventReminders';
 import { publishTodayPlanToWidgets } from '@/services/widgetSync';
+import { syncRunningPlanActivity } from '@/services/liveActivity';
 import { getDeviceTimezone } from '@/utils/timezone';
 
 /** A request to bring a particular day into view, e.g. from a notification. */
@@ -152,9 +153,11 @@ export function CalendarDataProvider({ children }: { children: ReactNode }) {
 
       setCounters(await getAllCounters());
 
-      // Keep the reminder schedule and the home screen widgets in step.
+      // Keep the reminder schedule, the home screen widgets and the Live
+      // Activity in step with the plans.
       rescheduleEventReminders(allEvents, role);
       publishTodayPlanToWidgets(allEvents, role);
+      syncRunningPlanActivity(allEvents, role, name, partner);
     } catch (e) {
       console.error('Error loading calendar data:', e);
     }
@@ -182,6 +185,15 @@ export function CalendarDataProvider({ children }: { children: ReactNode }) {
 
     return () => unsubs.forEach(unsub => unsub());
   }, [reload]);
+
+  // A plan begins and ends on the clock rather than on a user action, so the
+  // Live Activity is re-evaluated on a timer as well as on every change.
+  useEffect(() => {
+    const id = setInterval(() => {
+      syncRunningPlanActivity(events, myRole, myName, partnerName);
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [events, myRole, myName, partnerName]);
 
   const saveCalendarEvent: CalendarData['saveCalendarEvent'] = useCallback(
     async eventData => {

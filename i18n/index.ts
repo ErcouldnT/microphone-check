@@ -175,6 +175,17 @@ const translations = {
         daysSelected: "%{count} gün seçildi",
         clearSelection: "Seçimi Temizle",
         createPlanForRange: "Seçili Günlere Plan Ekle",
+        // --- v3.3: Missed plans ---
+        missedPlans: "Yapılmayanlar",
+        missedPlansHint: "Geçmiş günlerden tamamlanmamış planlar.",
+        moveToToday: "Bugüne Taşı",
+        dismissPlan: "Kaldır",
+        movedToToday: "Plan bugüne taşındı.",
+        // --- v3.3: Live Activity ---
+        liveActivity: "Canlı Etkinlik",
+        liveActivityHint: "Süren plan kilit ekranında ve Dynamic Island'da görünsün.",
+        happeningNowShort: "Şu an",
+        endsAt: "bitiş %{time}",
         months: {
             0: "Ocak", 1: "Şubat", 2: "Mart", 3: "Nisan", 4: "Mayıs", 5: "Haziran",
             6: "Temmuz", 7: "Ağustos", 8: "Eylül", 9: "Ekim", 10: "Kasım", 11: "Aralık"
@@ -354,6 +365,17 @@ const translations = {
         daysSelected: "%{count} days selected",
         clearSelection: "Clear Selection",
         createPlanForRange: "Add Plan for Selected Days",
+        // --- v3.3: Missed plans ---
+        missedPlans: "Missed",
+        missedPlansHint: "Plans from earlier days that were never completed.",
+        moveToToday: "Move to Today",
+        dismissPlan: "Remove",
+        movedToToday: "Plan moved to today.",
+        // --- v3.3: Live Activity ---
+        liveActivity: "Live Activity",
+        liveActivityHint: "Show the plan that is running on the Lock Screen and Dynamic Island.",
+        happeningNowShort: "Now",
+        endsAt: "ends %{time}",
         months: {
             0: "January", 1: "February", 2: "March", 3: "April", 4: "May", 5: "June",
             6: "July", 7: "August", 8: "September", 9: "October", 10: "November", 11: "December"
@@ -533,6 +555,17 @@ const translations = {
         daysSelected: "Выбрано дней: %{count}",
         clearSelection: "Очистить выбор",
         createPlanForRange: "Добавить план на выбранные дни",
+        // --- v3.3: Missed plans ---
+        missedPlans: "Незавершённые",
+        missedPlansHint: "Планы прошлых дней, которые остались невыполненными.",
+        moveToToday: "Перенести на сегодня",
+        dismissPlan: "Убрать",
+        movedToToday: "План перенесён на сегодня.",
+        // --- v3.3: Live Activity ---
+        liveActivity: "Live Activity",
+        liveActivityHint: "Показывать текущий план на экране блокировки и в Dynamic Island.",
+        happeningNowShort: "Сейчас",
+        endsAt: "до %{time}",
         months: {
             0: "Январь", 1: "Февраль", 2: "Март", 3: "Апрель", 4: "Май", 5: "Июнь",
             6: "Июль", 7: "Август", 8: "Сентябрь", 9: "Октябрь", 10: "Ноябрь", 11: "Декабрь"

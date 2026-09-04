@@ -18,10 +18,26 @@ export interface TodayPlanSnapshot {
   items: WidgetPlanItem[];
 }
 
+/** One running plan, as the Live Activity renders it. */
+export interface RunningPlan {
+  planId: string;
+  title: string;
+  /** Already resolved to a display name. */
+  who: string;
+  /** Epoch milliseconds. */
+  startedAt: number;
+  endsAt: number;
+  colorHex: string;
+  isPartner: boolean;
+}
+
 interface HomeWidgetNativeModule {
   setTodayPlan(json: string): boolean;
   refresh(): boolean;
   isSupported(): boolean;
+  areLiveActivitiesEnabled?(): boolean;
+  startPlanActivity?(json: string): boolean;
+  endPlanActivity?(): boolean;
 }
 
 // Absent in Expo Go and on web, where there is no home screen widget.
@@ -57,5 +73,33 @@ export const refreshHomeWidgets = (): void => {
     HomeWidget.refresh();
   } catch (e: any) {
     console.warn('Could not refresh home widget:', e?.message);
+  }
+};
+
+/** Whether the OS will show Live Activities for this app right now. */
+export const areLiveActivitiesEnabled = (): boolean => {
+  try {
+    return Boolean(HomeWidget?.areLiveActivitiesEnabled?.());
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Shows the plan that is running as a Live Activity, or clears it.
+ *
+ * Passing null ends whatever is showing, which is what happens when the plan
+ * finishes or is ticked off.
+ */
+export const setRunningPlan = (plan: RunningPlan | null): void => {
+  if (!HomeWidget) return;
+  try {
+    if (plan) {
+      HomeWidget.startPlanActivity?.(JSON.stringify(plan));
+    } else {
+      HomeWidget.endPlanActivity?.();
+    }
+  } catch (e: any) {
+    console.warn('Could not update the running-plan activity:', e?.message);
   }
 };
