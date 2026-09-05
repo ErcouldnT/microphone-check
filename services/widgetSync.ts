@@ -2,15 +2,19 @@ import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
 import { UserRole } from '@/db/settings';
 import { getLocalDateString } from '@/utils/date';
-import { getRemainingEventsForDay } from '@/utils/todayPlan';
+import { getEventsForDay, isEventFinished } from '@/utils/todayPlan';
 import {
   TodayPlanSnapshot,
   WidgetPlanItem,
   setTodayPlanSnapshot,
 } from '@/modules/home-widget';
 
-/** Cap matches the row budget of the smallest widget size. */
-const MAX_WIDGET_ITEMS = 5;
+/**
+ * Everything for the day is sent; the widget decides how many rows fit.
+ * A WidgetKit widget cannot scroll, so the large family shows as many as it
+ * can and reports the rest as a count.
+ */
+const MAX_WIDGET_ITEMS = 24;
 
 /**
  * Pushes the current "what is left today" list to the home screen widgets.
@@ -27,9 +31,15 @@ export const publishTodayPlanToWidgets = (
     const today = getLocalDateString(now);
     const partnerRole: UserRole = myRole === 'male' ? 'female' : 'male';
 
-    const items: WidgetPlanItem[] = getRemainingEventsForDay(events, today, now)
+    // Still-ahead plans first, then what is already behind us, flagged so the
+    // widget can dim it rather than dropping it.
+    const ordered = getEventsForDay(events, today)
+      .map(e => ({ event: e, done: isEventFinished(e, today, now) }))
+      .sort((a, b) => Number(a.done) - Number(b.done));
+
+    const items: WidgetPlanItem[] = ordered
       .slice(0, MAX_WIDGET_ITEMS)
-      .map(e => ({
+      .map(({ event: e, done }) => ({
         title: e.title,
         time: e.isAllDay ? null : e.startTime ?? null,
         color: e.color || '#00FFFF',
@@ -39,6 +49,7 @@ export const publishTodayPlanToWidgets = (
             : e.target === partnerRole || e.target === 'partner'
             ? 'partner'
             : 'me',
+        done,
       }));
 
     const snapshot: TodayPlanSnapshot = {

@@ -8,6 +8,8 @@ export interface WidgetPlanItem {
   color: string;
   /** 'me' | 'partner' | 'both' — already resolved from the device's role. */
   target: 'me' | 'partner' | 'both';
+  /** Ticked off, or its time has already gone by. */
+  done: boolean;
 }
 
 export interface TodayPlanSnapshot {

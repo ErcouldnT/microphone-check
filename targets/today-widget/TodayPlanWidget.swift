@@ -25,6 +25,10 @@ struct TodayPlanItem: Codable, Identifiable {
   let time: String?
   let color: String
   let target: String
+  /// Ticked off, or its time has gone by. Dimmed rather than dropped.
+  let done: Bool?
+
+  var isDone: Bool { done ?? false }
 
   var id: String { "\(title)-\(time ?? "allday")" }
 
@@ -81,10 +85,21 @@ struct TodayPlanProvider: TimelineProvider {
 // MARK: - View
 
 struct TodayPlanWidgetView: View {
+  @Environment(\.widgetFamily) private var family
   var entry: TodayPlanEntry
 
+  /// A WidgetKit widget cannot scroll, so each family shows as many rows as it
+  /// can fit and the remainder is reported as a count.
+  private var rowBudget: Int {
+    switch family {
+    case .systemLarge: return 10
+    case .systemExtraLarge: return 12
+    default: return 4
+    }
+  }
+
   private var visibleItems: [TodayPlanItem] {
-    Array(entry.snapshot.items.prefix(4))
+    Array(entry.snapshot.items.prefix(rowBudget))
   }
 
   var body: some View {
@@ -112,6 +127,7 @@ struct TodayPlanWidgetView: View {
           HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
               .fill(Color(hex: item.color))
+              .opacity(item.isDone ? 0.35 : 1)
               .frame(width: 3, height: 18)
 
             Text(item.time ?? "•")
@@ -121,7 +137,8 @@ struct TodayPlanWidgetView: View {
 
             Text(item.title)
               .font(.system(size: 12, weight: .bold))
-              .foregroundColor(.primary)
+              .foregroundColor(item.isDone ? .secondary : .primary)
+              .strikethrough(item.isDone)
               .lineLimit(1)
 
             Spacer(minLength: 4)
@@ -160,7 +177,7 @@ struct TodayPlanWidget: Widget {
     }
     .configurationDisplayName("Microphone Check")
     .description("What is still planned for today.")
-    .supportedFamilies([.systemMedium, .systemLarge])
+    .supportedFamilies([.systemMedium, .systemLarge, .systemExtraLarge])
   }
 }
 

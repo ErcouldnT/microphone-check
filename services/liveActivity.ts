@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-
 import i18n from '@/i18n';
 import { CalendarEvent } from '@/db/events';
 import { UserRole } from '@/db/settings';
@@ -64,7 +62,9 @@ export const syncRunningPlanActivity = (
   partnerName: string,
   now: Date = new Date()
 ): void => {
-  if (Platform.OS !== 'ios' || !areLiveActivitiesEnabled()) return;
+  // iOS renders this as a Live Activity, Android as an ongoing notification;
+  // the native module reports whether the platform can show either.
+  if (!areLiveActivitiesEnabled()) return;
 
   const event = findRunningPlan(events, now);
   if (!event) {
