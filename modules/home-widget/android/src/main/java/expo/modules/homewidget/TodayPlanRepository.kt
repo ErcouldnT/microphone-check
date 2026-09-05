@@ -14,7 +14,9 @@ data class TodayPlanEntry(
   val endTime: String?,
   val isAllDay: Boolean,
   val color: String,
-  val target: String
+  val target: String,
+  /** Ticked off, or its clock time has already gone by. */
+  val isDone: Boolean
 )
 
 /**
@@ -28,18 +30,20 @@ data class TodayPlanEntry(
 object TodayPlanRepository {
 
   private const val DATABASE_RELATIVE_PATH = "SQLite/microphone_check.db"
-  private const val MAX_ENTRIES = 5
+  private const val MAX_ENTRIES = 5 // only used for the collapsed preview
 
   fun todayDateString(): String =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
 
   /**
-   * Plans still ahead today, in display order.
+   * Everything planned for today, still-ahead entries first.
    *
-   * Mirrors `utils/todayPlan.ts` on the JS side: completed plans and timed
-   * plans whose end time has passed are left out, all-day plans stay all day.
+   * Nothing is dropped so the list can be scrolled through in full; what is
+   * already behind us is flagged instead, and the widget renders it dimmed
+   * below the rest. That keeps the top of the widget answering "what is left"
+   * while the whole day stays reachable.
    */
-  fun getRemainingPlansForToday(context: Context): List<TodayPlanEntry> {
+  fun getPlansForToday(context: Context): List<TodayPlanEntry> {
     val dbFile = File(context.filesDir, DATABASE_RELATIVE_PATH)
     if (!dbFile.exists()) return emptyList()
 
@@ -65,17 +69,16 @@ object TodayPlanRepository {
       cursor.use { c ->
         while (c.moveToNext()) {
           val completed = c.getInt(6) == 1
-          if (completed) continue
-
           val isAllDay = c.getInt(3) == 1
           val startTime = c.getString(1)
           val endTime = c.getString(2)
           val endDate = c.getString(7) ?: today
 
-          if (!isAllDay && endDate == today) {
+          var isDone = completed
+          if (!isDone && !isAllDay && endDate == today) {
             val reference = endTime ?: startTime
             val minutes = parseMinutes(reference)
-            if (minutes != null && nowMinutes > minutes) continue
+            if (minutes != null && nowMinutes > minutes) isDone = true
           }
 
           entries.add(
@@ -85,7 +88,8 @@ object TodayPlanRepository {
               endTime = endTime,
               isAllDay = isAllDay,
               color = c.getString(4) ?: "#00FFFF",
-              target = c.getString(5) ?: "both"
+              target = c.getString(5) ?: "both",
+              isDone = isDone
             )
           )
         }
@@ -100,9 +104,10 @@ object TodayPlanRepository {
       }
     }
 
-    // All-day plans first, then chronological.
+    // Still ahead first, then all-day before timed, then chronological.
     return entries.sortedWith(
-      compareByDescending<TodayPlanEntry> { it.isAllDay }
+      compareBy<TodayPlanEntry> { it.isDone }
+        .thenByDescending { it.isAllDay }
         .thenBy { it.startTime ?: "" }
     )
   }
